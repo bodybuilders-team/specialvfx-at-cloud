@@ -19,11 +19,13 @@ public class EnhanceImageHandler extends ImageProcessingHandler {
         String inputImagePath = args[0];
         String outputImagePath = args[1];
         BufferedImage bufferedInput = UtilImageIO.loadImageNotNull(inputImagePath);
-        BufferedImage bufferedOutput = new EnhanceImageHandler().process(bufferedInput);
+        ImageProcessingRequest request = new ImageProcessingRequest(0, bufferedInput);
+        BufferedImage bufferedOutput = new EnhanceImageHandler().process(request);
         UtilImageIO.saveImage(bufferedOutput, outputImagePath);
     }
 
-    public BufferedImage process(BufferedImage bi) {
+    public BufferedImage process(ImageProcessingRequest request) {
+        BufferedImage bi = request.getImage();
         GrayU8 gray = ConvertBufferedImage.convertFrom(bi, (GrayU8) null);
         GrayU8 adjusted = gray.createSameShape();
         EnhanceImageOps.equalizeLocal(gray, 50, adjusted, 256, null);

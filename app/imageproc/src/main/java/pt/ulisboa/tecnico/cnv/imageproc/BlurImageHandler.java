@@ -21,11 +21,13 @@ public class BlurImageHandler extends ImageProcessingHandler {
         String inputImagePath = args[0];
         String outputImagePath = args[1];
         BufferedImage bufferedInput = UtilImageIO.loadImageNotNull(inputImagePath);
-        BufferedImage bufferedOutput = new BlurImageHandler().process(bufferedInput);
+        ImageProcessingRequest request = new ImageProcessingRequest(0, bufferedInput);
+        BufferedImage bufferedOutput = new BlurImageHandler().process(request);
         UtilImageIO.saveImage(bufferedOutput, outputImagePath);
     }
 
-    public BufferedImage process(BufferedImage bi) {
+    public BufferedImage process(ImageProcessingRequest request) {
+        BufferedImage bi = request.getImage();
         Planar<GrayU8> input = ConvertBufferedImage.convertFrom(bi, true, ImageType.pl(3, GrayU8.class));
         Planar<GrayU8> output = input.createSameShape();
         GBlurImageOps.gaussian(input, output, -1, 32, null);

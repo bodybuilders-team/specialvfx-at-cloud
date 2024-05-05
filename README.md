@@ -65,7 +65,7 @@ To run a workload directly, you can use the following commands:
 To instrument the Image Processing workload, you can use the following command:
 
 ```shell
-java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=ICount:pt.ulisboa.tecnico.cnv.imageproc:output pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler
+java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=ICountParallel:pt.ulisboa.tecnico.cnv.imageproc:output pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler app/imageproc/resources/cat.jpg app/imageproc/resources/output.jpg
 ```
 
 You can change the `ICount` class to any other class that implements the instrumentation tool, and

@@ -35,4 +35,8 @@ public class JavassistAgent {
         List<String> packageNameList = Arrays.asList(packageNames.split(","));
         inst.addTransformer(getTransformer(toolName, packageNameList, writeDestination), true);
     }
+
+    public static void agentmain(String agentArgs, Instrumentation inst) throws Exception {
+        premain(agentArgs, inst);
+    }
 }

@@ -16,18 +16,22 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.Base64;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 public abstract class ImageProcessingHandler implements HttpHandler, RequestHandler<Map<String, String>, String> {
 
-    abstract BufferedImage process(BufferedImage bi) throws IOException;
+    private static AtomicLong idCounter = new AtomicLong(0);
+
+    abstract BufferedImage process(ImageProcessingRequest request) throws IOException;
 
     private String handleRequest(String inputEncoded, String format) {
         byte[] decoded = Base64.getDecoder().decode(inputEncoded);
         try {
             ByteArrayInputStream bais = new ByteArrayInputStream(decoded);
             BufferedImage bi = ImageIO.read(bais);
-            bi = process(bi);
+            ImageProcessingRequest request = new ImageProcessingRequest(idCounter.getAndIncrement(), bi);
+            bi = process(request);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ImageIO.write(bi, format, baos);
             return Base64.getEncoder().encodeToString(baos.toByteArray());
@@ -68,3 +72,4 @@ public abstract class ImageProcessingHandler implements HttpHandler, RequestHand
         return handleRequest(event.get("body"), event.get("fileFormat"));
     }
 }
+
