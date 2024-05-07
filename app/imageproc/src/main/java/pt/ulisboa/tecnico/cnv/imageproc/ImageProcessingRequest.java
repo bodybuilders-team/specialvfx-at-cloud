@@ -5,8 +5,8 @@ import java.awt.image.BufferedImage;
 public class ImageProcessingRequest {
     private long id;
     private BufferedImage image;
-    private long bblCount;
-    private long instructionCount;
+    public long bblCount;
+    public long instructionCount;
     private boolean completed = false;
 
     public ImageProcessingRequest(long id, BufferedImage image) {
@@ -32,7 +32,7 @@ public class ImageProcessingRequest {
     }
 
     public long getBblCount() {
-        return bblCount;
+        return this.bblCount;
     }
 
     public void setBblCount(long bblCount) {
