@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Define the command to run
-COMMAND="java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=ICountParallel:pt.ulisboa.tecnico.cnv.imageproc:output pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler"
+COMMAND="java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=ImageProcessingAnalyser:pt.ulisboa.tecnico.cnv.imageproc:output pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler"
 
 OUTPUT_FILE="output.txt"
 
