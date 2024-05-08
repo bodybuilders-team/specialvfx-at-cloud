@@ -35,7 +35,9 @@ The project contains the following components:
     * [`webserver`](app/webserver) - The web server exposing the functionality of the workloads.
 * [`instrumentation`](instrumentation) - The instrumentation module that contains the code for collecting metrics with
   Javassist.
-* [`scripts`](scripts) - The scripts to deploy the application on AWS.
+* [`scripts`](scripts) - Scripts to automate instrumentation and deployment tasks;
+    * [`aws`](scripts/aws) - Scripts to deploy the application to AWS;
+    * [`instrumentation`](scripts/instrumentation) - Scripts to instrument the application.
 
 ## Usage
 
@@ -65,8 +67,12 @@ To run a workload directly, you can use the following commands:
 To instrument the Image Processing workload, you can use the following command:
 
 ```shell
-java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=ICountParallel:pt.ulisboa.tecnico.cnv.imageproc:output pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler app/imageproc/resources/cat.jpg app/imageproc/resources/output.jpg
+java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=<tool name>:<package to instrument>:<path to write instrumented bytecodes> <class to instrument> <args>
 ```
 
-You can change the `ICount` class to any other class that implements the instrumentation tool, and
-the `BlurImageHandler` class to any other class you want to instrument.
+For example, to instrument the `BlurImageHandler` class with the `ImageProcessingAnalyser` tool, you can use the
+following command:
+
+```shell
+java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=ImageProcessingAnalyser:pt.ulisboa.tecnico.cnv.imageproc:output pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler app/imageproc/resources/cat.jpg app/imageproc/resources/output.jpg
+```

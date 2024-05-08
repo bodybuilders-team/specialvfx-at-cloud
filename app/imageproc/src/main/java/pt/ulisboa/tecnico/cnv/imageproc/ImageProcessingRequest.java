@@ -1,23 +1,19 @@
 package pt.ulisboa.tecnico.cnv.imageproc;
 
 import lombok.Getter;
-import lombok.Setter;
+import pt.ulisboa.tecnico.cnv.shared.Request;
 
 import java.awt.image.BufferedImage;
 
-public class ImageProcessingRequest {
-    private long id;
-    @Getter
-    private BufferedImage image;
-    public long bblCount;
-    public long instructionCount;
-    @Setter
-    private boolean completed = false;
-    @Setter
-    private long opTime;
+/**
+ * An Image Processing request in the system containing an image to be processed.
+ */
+@Getter
+public class ImageProcessingRequest extends Request {
+    private final BufferedImage image;
 
     public ImageProcessingRequest(long id, BufferedImage image) {
-        this.id = id;
+        super(id);
         this.image = image;
     }
 
@@ -33,3 +29,4 @@ public class ImageProcessingRequest {
                 '}';
     }
 }
+

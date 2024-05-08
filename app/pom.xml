@@ -1,26 +1,27 @@
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xmlns="http://maven.apache.org/POM/4.0.0"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-  <modelVersion>4.0.0</modelVersion>
+    <modelVersion>4.0.0</modelVersion>
 
-  <groupId>pt.ulisboa.tecnico.cnv</groupId>
-  <artifactId>app</artifactId>
-  <version>1.0.0-SNAPSHOT</version>
-  <packaging>pom</packaging>
-  <name>app</name>
+    <groupId>pt.ulisboa.tecnico.cnv</groupId>
+    <artifactId>app</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+    <packaging>pom</packaging>
+    <name>app</name>
 
-  <properties>
-    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-  </properties>
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    </properties>
 
-  <!-- Modules are subcomponents of the project.
-      The reactor collects all the available modules to build;
-      sorts the projects into the correct build order;
-      builds the selected projects in order. -->
-  <modules>
-    <module>raytracer</module>
-    <module>imageproc</module>
-    <module>webserver</module>
-  </modules>
+    <!-- Modules are subcomponents of the project.
+        The reactor collects all the available modules to build;
+        sorts the projects into the correct build order;
+        builds the selected projects in order. -->
+    <modules>
+        <module>raytracer</module>
+        <module>imageproc</module>
+        <module>webserver</module>
+        <module>shared</module>
+    </modules>
 
 </project>

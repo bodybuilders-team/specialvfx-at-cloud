@@ -18,10 +18,12 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class RaytracerHandler implements HttpHandler, RequestHandler<Map<String, String>, String> {
 
-    private final static ObjectMapper mapper = new ObjectMapper();
+    private static final ObjectMapper mapper = new ObjectMapper();
+    private static final AtomicLong idCounter = new AtomicLong(0);
 
     @Override
     public void handle(HttpExchange he) throws IOException {
@@ -50,7 +52,8 @@ public class RaytracerHandler implements HttpHandler, RequestHandler<Map<String,
         Main.MULTI_THREAD = Boolean.parseBoolean(parameters.getOrDefault("multi", "false"));
 
         InputStream stream = he.getRequestBody();
-        Map<String, Object> body = mapper.readValue(stream, new TypeReference<>() {});
+        Map<String, Object> body = mapper.readValue(stream, new TypeReference<>() {
+        });
 
         byte[] input = ((String) body.get("scene")).getBytes();
         byte[] texmap = null;
@@ -90,6 +93,7 @@ public class RaytracerHandler implements HttpHandler, RequestHandler<Map<String,
 
     private byte[] handleRequest(byte[] input, byte[] texmap, int scols, int srows, int wcols, int wrows, int coff, int roff) {
         try {
+            RaytracerRequest request = new RaytracerRequest(idCounter.getAndIncrement(), input, texmap, scols, srows, wcols, wrows, coff, roff);
             RayTracer rayTracer = new RayTracer(scols, srows, wcols, wrows, coff, roff);
             rayTracer.readScene(input, texmap);
             BufferedImage image = rayTracer.draw();
@@ -103,7 +107,7 @@ public class RaytracerHandler implements HttpHandler, RequestHandler<Map<String,
     }
 
     @Override
-    public String handleRequest(Map<String,String> event, Context context) {
+    public String handleRequest(Map<String, String> event, Context context) {
         Main.ANTI_ALIAS = Boolean.parseBoolean(event.getOrDefault("aa", "false"));
         Main.MULTI_THREAD = Boolean.parseBoolean(event.getOrDefault("multi", "false"));
         int scols = Integer.parseInt(event.get("scols"));

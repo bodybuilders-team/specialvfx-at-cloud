@@ -13,6 +13,15 @@ import java.util.logging.FileHandler;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
 
+/**
+ * Analyser for image processing requests.
+ * <p>
+ * It keeps track of the basic block count and instruction count of each request.
+ * Each request is stored in a map with the thread id as the key.
+ * The request is then printed to a log file when it is completed.
+ * <p>
+ * A thread only processes one request at a time.
+ */
 public class ImageProcessingAnalyser extends AbstractJavassistTool {
 
     private static final String LOG_FILE = "icountparallel.txt";
@@ -33,7 +42,13 @@ public class ImageProcessingAnalyser extends AbstractJavassistTool {
         super(packageNameList, writeDestination);
     }
 
-    public static void printStatistics(long opTime) {
+    /**
+     * Finalize the request by setting the operation time and marking it as completed.
+     * The request is then printed to the log.
+     *
+     * @param opTime the operation time
+     */
+    public static void finalizeRequest(long opTime) {
         Long threadId = Thread.currentThread().getId();
         ImageProcessingRequest storedRequest = threadRequests.get(threadId);
         if (storedRequest != null) {
@@ -44,17 +59,25 @@ public class ImageProcessingAnalyser extends AbstractJavassistTool {
         logger.info(String.format("[%s] Request from thread %s: %s%n", ImageProcessingAnalyser.class.getSimpleName(), threadId, storedRequest));
     }
 
+    /**
+     * Handle the request by storing it in the threadRequests map.
+     *
+     * @param request the request to be handled
+     */
     public static void handleRequest(ImageProcessingRequest request) {
         threadRequests.put(Thread.currentThread().getId(), request);
     }
 
+    /**
+     * Increment the basic block count and instruction count of the current request.
+     *
+     * @param length the length of the basic block
+     */
     public static void incBasicBlock(int length) {
         ImageProcessingRequest request = threadRequests.get(Thread.currentThread().getId());
         if (request != null) {
-            /*TODO: Eu nao entendo porque é que os setters nao estavam a funcionar, estão a criar algum tipo de recursividade que nao entendo,
-                por isso comentei o setter e fiz o incremento diretamente na variavel*/
-            request.bblCount++;
-            request.instructionCount += length;
+            request.setBblCount(request.getBblCount() + 1);
+            request.setInstructionCount(request.getInstructionCount() + length);
         }
     }
 
@@ -75,7 +98,7 @@ public class ImageProcessingAnalyser extends AbstractJavassistTool {
             builder.append("opTime = endTime-startTime;");
             behavior.insertAfter(builder.toString());
 
-            behavior.insertAfter(String.format("%s.printStatistics(opTime);", ImageProcessingAnalyser.class.getName()));
+            behavior.insertAfter(String.format("%s.finalizeRequest(opTime);", ImageProcessingAnalyser.class.getName()));
         }
     }
 

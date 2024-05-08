@@ -129,21 +129,5 @@ public abstract class AbstractJavassistTool implements ClassFileTransformer {
             this.position = position;
             this.entrances = entrances;
         }
-
-        public CtBehavior getBehavior() {
-            return behavior;
-        }
-
-        public int getPosition() {
-            return position;
-        }
-
-        public int getLine() {
-            return line;
-        }
-
-        public int getLength() {
-            return length;
-        }
     }
 }

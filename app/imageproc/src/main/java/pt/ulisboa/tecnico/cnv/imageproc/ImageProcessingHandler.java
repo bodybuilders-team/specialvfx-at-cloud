@@ -21,7 +21,7 @@ import java.util.stream.Collectors;
 
 public abstract class ImageProcessingHandler implements HttpHandler, RequestHandler<Map<String, String>, String> {
 
-    private static AtomicLong idCounter = new AtomicLong(0);
+    private static final AtomicLong idCounter = new AtomicLong(0);
 
     abstract BufferedImage process(ImageProcessingRequest request) throws IOException;
 
