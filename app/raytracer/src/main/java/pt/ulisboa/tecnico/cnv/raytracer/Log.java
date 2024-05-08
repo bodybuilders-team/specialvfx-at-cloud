@@ -14,6 +14,6 @@ public class Log {
     }
 
     public static void debug(String msg) {
-        if(Main.DEBUG) System.out.println(msg);
+        if (Main.DEBUG) System.out.println(msg);
     }
 }

@@ -17,13 +17,13 @@ public class CheckerPigment implements Pigment {
     }
 
     public Color getColor(Point p) {
-        int which = (floor(p.x/scale) + floor(p.y/scale) + floor(p.z/scale)) % 2;
-        if(which == 0) return color1;
+        int which = (floor(p.x / scale) + floor(p.y / scale) + floor(p.z / scale)) % 2;
+        if (which == 0) return color1;
         return color2;
     }
 
     private int floor(double d) {
-        return (int)Math.abs(Math.floor(d));
+        return (int) Math.abs(Math.floor(d));
     }
 
     public String toString() {

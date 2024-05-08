@@ -32,7 +32,7 @@ public class ColorUtil {
     public static Color average(Color... colors) {
         float[] rgb = new float[3];
         float mult = 1.0f / colors.length;
-        for(Color c: colors) {
+        for (Color c : colors) {
             float[] cc = c.getRGBColorComponents(null);
             rgb[0] += cc[0] * mult;
             rgb[1] += cc[1] * mult;

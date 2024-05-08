@@ -74,5 +74,5 @@ For example, to instrument the `BlurImageHandler` class with the `ImageProcessin
 following command:
 
 ```shell
-java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=ImageProcessingAnalyser:pt.ulisboa.tecnico.cnv.imageproc:output pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler app/imageproc/resources/cat.jpg app/imageproc/resources/output.jpg
+java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=RequestAnalyser:pt.ulisboa.tecnico.cnv.imageproc:output pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler app/imageproc/resources/cat.jpg app/imageproc/resources/output.jpg
 ```

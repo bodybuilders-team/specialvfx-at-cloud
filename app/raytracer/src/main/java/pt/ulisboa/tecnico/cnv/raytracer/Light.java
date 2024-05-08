@@ -16,12 +16,11 @@ public class Light {
     }
 
     /**
-     *
      * @param d - distance
      * @return attenuation factor at distance d
      */
     public float getAttenuationFactor(double d) {
-        return 1.0f / (float)(a + b*d + c*(d*d));
+        return 1.0f / (float) (a + b * d + c * (d * d));
     }
 
     public Color getColor(RayHit hit, Ray lightRay) {
@@ -32,10 +31,10 @@ public class Light {
 
         // diffuse
         float diffuseStrength;
-        if(hit.shape.finish.diff > 0) {
+        if (hit.shape.finish.diff > 0) {
 //        Log.debug("  normal vector = " + hit.normal);
 //        Log.debug("  light vector  = " + lightRay.direction);
-            diffuseStrength = hit.shape.finish.diff * (float)Math.max(0.0, hit.normal.dot(lightRay.direction));
+            diffuseStrength = hit.shape.finish.diff * (float) Math.max(0.0, hit.normal.dot(lightRay.direction));
         } else {
             diffuseStrength = 0.0f;
         }
@@ -43,12 +42,12 @@ public class Light {
 
         // specular
         float specularStrength;
-        if(hit.shape.finish.spec > 0) {
+        if (hit.shape.finish.spec > 0) {
             Vector halfway = Vector.halfway(lightRay.direction, hit.ray.direction.negate());
 //        Log.debug("  halfway vector= " + halfway);
-            specularStrength = hit.shape.finish.spec * (float)Math.pow(Math.max(0.0, hit.normal.dot(halfway)), hit.shape.finish.shiny);
+            specularStrength = hit.shape.finish.spec * (float) Math.pow(Math.max(0.0, hit.normal.dot(halfway)), hit.shape.finish.shiny);
 
-        // NOTE: the method commented below seems to look better, but the specular points are much smaller, and less spread-out
+            // NOTE: the method commented below seems to look better, but the specular points are much smaller, and less spread-out
 //        Vector r = lightRay.direction.minus(hit.normal.times(2.0*lightRay.direction.dot(hit.normal)));
 //        Log.debug("  r             = " + r);
 //        float specularStrength = hit.shape.finish.spec * (float)Math.pow(Math.max(0.0, hit.ray.direction.dot(r)), hit.shape.finish.shiny);

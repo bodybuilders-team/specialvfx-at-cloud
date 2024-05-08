@@ -1,6 +1,8 @@
 package pt.ulisboa.tecnico.cnv.raytracer.shapes;
 
-import pt.ulisboa.tecnico.cnv.raytracer.*;
+import pt.ulisboa.tecnico.cnv.raytracer.Log;
+import pt.ulisboa.tecnico.cnv.raytracer.Ray;
+import pt.ulisboa.tecnico.cnv.raytracer.RayHit;
 
 import java.util.List;
 

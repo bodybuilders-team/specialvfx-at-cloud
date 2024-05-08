@@ -1,6 +1,9 @@
 package pt.ulisboa.tecnico.cnv.raytracer.shapes;
 
-import pt.ulisboa.tecnico.cnv.raytracer.*;
+import pt.ulisboa.tecnico.cnv.raytracer.Point;
+import pt.ulisboa.tecnico.cnv.raytracer.Ray;
+import pt.ulisboa.tecnico.cnv.raytracer.RayHit;
+import pt.ulisboa.tecnico.cnv.raytracer.Vector;
 
 public class Sphere extends Shape {
     Point center;
@@ -38,15 +41,15 @@ public class Sphere extends Shape {
         Vector u = ray.direction;
         Vector v = new Vector(center, p);
         double b = 2 * (v.dot(u));
-        double c = v.dot(v) - radius*radius;
-        double discriminant = b*b - 4*c;
+        double c = v.dot(v) - radius * radius;
+        double discriminant = b * b - 4 * c;
 
-        if(discriminant < 0) return null;
+        if (discriminant < 0) return null;
 
         double tMinus = (-b - Math.sqrt(discriminant)) / 2;
         double tPlus = (-b + Math.sqrt(discriminant)) / 2;
 
-        if(tMinus < 0 && tPlus < 0) {
+        if (tMinus < 0 && tPlus < 0) {
             // sphere is behind the ray
             return null;
         }
@@ -55,7 +58,7 @@ public class Sphere extends Shape {
         Vector normal;
         Point intersection;
         boolean incoming;
-        if(tMinus < 0 && tPlus > 0) {
+        if (tMinus < 0 && tPlus > 0) {
             // ray origin lies inside the sphere. take tPlus
             tValue = tPlus;
 //            return null;

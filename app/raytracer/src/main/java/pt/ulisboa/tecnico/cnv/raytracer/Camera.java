@@ -45,9 +45,10 @@ public class Camera {
     public Ray getRay(int col, int row) {
         return getRay(col, row, 0.5, 0.5);
     }
+
     public Ray getRay(int col, int row, double pixelAdjustmentX, double pixelAdjustmentY) {
-        double x = (((double)col + pixelAdjustmentX) / cols) * windowWidth - (windowWidth / 2.0);
-        double y = (((double)row + pixelAdjustmentY) / rows) * windowHeight - (windowHeight / 2.0);
+        double x = (((double) col + pixelAdjustmentX) / cols) * windowWidth - (windowWidth / 2.0);
+        double y = (((double) row + pixelAdjustmentY) / rows) * windowHeight - (windowHeight / 2.0);
 
         Vector v = new Vector(eye, convertCoords(new Point(x, y, -windowDistance)));
 

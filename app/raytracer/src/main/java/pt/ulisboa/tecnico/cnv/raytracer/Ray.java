@@ -14,7 +14,7 @@ public class Ray {
 
         this.direction = direction.normalize();
 
-        if(adjustForError) origin = origin.plus(this.direction.times(0.001));
+        if (adjustForError) origin = origin.plus(this.direction.times(0.001));
 
         this.origin = origin;
     }

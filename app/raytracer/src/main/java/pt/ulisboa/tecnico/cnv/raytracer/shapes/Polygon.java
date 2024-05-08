@@ -1,6 +1,6 @@
 package pt.ulisboa.tecnico.cnv.raytracer.shapes;
 
-import pt.ulisboa.tecnico.cnv.raytracer.*;
+import pt.ulisboa.tecnico.cnv.raytracer.Vector;
 
 public class Polygon {
     final double a, b, c, d;

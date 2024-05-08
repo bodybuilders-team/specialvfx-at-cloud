@@ -10,38 +10,36 @@ import java.util.Arrays;
 import java.util.Optional;
 
 public class Main {
-    private static final String USAGE = "Usage:\n"+
-            "java -cp src raytracer.Main infile outfule scols srows wcols wrows coff roff [-tm=texmap.bmp] [-options]\n"+
-            "\n"+
-            "    where:\n"+
-            "        infile          - input file name\n"+
-            "        outfile         - output result file name\n"+
-            "        scols           - scene width (in pixels)\n"+
-            "        srows           - scene height (in pixels)\n"+
-            "        wcols           - window width (in pixels, max scols)\n"+
-            "        wrows           - window height (in pixels, max srows)\n"+
-            "        coff            - window column offset (in pixels, max: scols - wcols)\n"+
-            "        roff            - windows row offset (in pixels, max: srows - wrows)\n"+
-            "        -tm=texmap.bmp  - bmp output file name\n"+
+    public static final boolean DEBUG = false;
+//            "        -nocap    - cylinders and cones are infinite";
+    private static final String USAGE = "Usage:\n" +
+            "java -cp src raytracer.Main infile outfule scols srows wcols wrows coff roff [-tm=texmap.bmp] [-options]\n" +
+            "\n" +
+            "    where:\n" +
+            "        infile          - input file name\n" +
+            "        outfile         - output result file name\n" +
+            "        scols           - scene width (in pixels)\n" +
+            "        srows           - scene height (in pixels)\n" +
+            "        wcols           - window width (in pixels, max scols)\n" +
+            "        wrows           - window height (in pixels, max srows)\n" +
+            "        coff            - window column offset (in pixels, max: scols - wcols)\n" +
+            "        roff            - windows row offset (in pixels, max: srows - wrows)\n" +
+            "        -tm=texmap.bmp  - bmp output file name\n" +
 //            "        -test     - run in test mode (see below)\n"+
 //            "        -noshadow - don't compute shadows\n"+
 //            "        -noreflec - don't do reflections\n"+
 //            "        -notrans  - don't do transparency\n"+
-            "        -aa             - use anti-aliasing (~4x slower)\n"+
+            "        -aa             - use anti-aliasing (~4x slower)\n" +
             "        -multi          - use multi-threading (good for large, anti-aliased images)";
-//            "        -nocap    - cylinders and cones are infinite";
-
     public static boolean ANTI_ALIAS = false;
     public static boolean MULTI_THREAD = false;
-    public static final boolean DEBUG = false;
-
 
     private static void printUsage() {
         System.out.println(USAGE);
     }
 
     public static void main(String[] args) throws IOException {
-        if(args.length < 8) {
+        if (args.length < 8) {
             printUsage();
             System.exit(0);
         }

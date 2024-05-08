@@ -4,7 +4,7 @@ public class Matrix {
     private double m[][];
 
     public Matrix(double m[][]) {
-        if(m.length < 4 || m[0].length < 4) throw new IllegalArgumentException("Matrix must be a 4x4 array");
+        if (m.length < 4 || m[0].length < 4) throw new IllegalArgumentException("Matrix must be a 4x4 array");
         this.m = m;
     }
 
@@ -42,8 +42,8 @@ public class Matrix {
         double m2[][] = matrix.m;
         double r[][] = new double[4][4];
 
-        for(int row=0;row<4;row++) {
-            for(int col=0;col<4;col++) {
+        for (int row = 0; row < 4; row++) {
+            for (int col = 0; col < 4; col++) {
                 r[row][col] = m[row][0] * m2[0][col] + m[row][1] * m2[1][col] + m[row][2] * m2[2][col] + m[row][3] * m2[3][col];
             }
         }

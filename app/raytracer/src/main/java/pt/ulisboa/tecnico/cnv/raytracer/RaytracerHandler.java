@@ -66,7 +66,8 @@ public class RaytracerHandler implements HttpHandler, RequestHandler<Map<String,
             }
         }
 
-        byte[] result = handleRequest(input, texmap, scols, srows, wcols, wrows, coff, roff);
+        RaytracerRequest request = new RaytracerRequest(idCounter.getAndIncrement(), input, texmap, scols, srows, wcols, wrows, coff, roff);
+        byte[] result = process(request);
         String response = String.format("data:image/bmp;base64,%s", Base64.getEncoder().encodeToString(result));
 
         he.sendResponseHeaders(200, response.length());
@@ -91,11 +92,10 @@ public class RaytracerHandler implements HttpHandler, RequestHandler<Map<String,
         return result;
     }
 
-    private byte[] handleRequest(byte[] input, byte[] texmap, int scols, int srows, int wcols, int wrows, int coff, int roff) {
+    private byte[] process(RaytracerRequest request) {
         try {
-            RaytracerRequest request = new RaytracerRequest(idCounter.getAndIncrement(), input, texmap, scols, srows, wcols, wrows, coff, roff);
-            RayTracer rayTracer = new RayTracer(scols, srows, wcols, wrows, coff, roff);
-            rayTracer.readScene(input, texmap);
+            RayTracer rayTracer = new RayTracer(request.getScols(), request.getSrows(), request.getWcols(), request.getWrows(), request.getCoff(), request.getRoff());
+            rayTracer.readScene(request.getInput(), request.getTexmap());
             BufferedImage image = rayTracer.draw();
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ImageIO.write(image, "bmp", baos);
@@ -119,7 +119,8 @@ public class RaytracerHandler implements HttpHandler, RequestHandler<Map<String,
         Base64.Decoder decoder = Base64.getDecoder();
         byte[] input = decoder.decode(event.get("input"));
         byte[] texmap = event.containsKey("texmap") ? decoder.decode(event.get("texmap")) : null;
-        byte[] byteArrayResult = handleRequest(input, texmap, scols, srows, wcols, wrows, coff, roff);
+        RaytracerRequest request = new RaytracerRequest(idCounter.getAndIncrement(), input, texmap, scols, srows, wcols, wrows, coff, roff);
+        byte[] byteArrayResult = process(request);
         return Base64.getEncoder().encodeToString(byteArrayResult);
     }
 }

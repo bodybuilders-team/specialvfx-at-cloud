@@ -1,6 +1,9 @@
 package pt.ulisboa.tecnico.cnv.raytracer.pigments;
 
-import pt.ulisboa.tecnico.cnv.raytracer.*;
+import pt.ulisboa.tecnico.cnv.raytracer.ColorUtil;
+import pt.ulisboa.tecnico.cnv.raytracer.Log;
+import pt.ulisboa.tecnico.cnv.raytracer.Point;
+import pt.ulisboa.tecnico.cnv.raytracer.Vector;
 
 import java.awt.Color;
 
@@ -20,7 +23,7 @@ public class GradientPigment implements Pigment {
     }
 
     public Color getColor(Point p) {
-        if(true) return start;
+        if (true) return start;
 
         double d = Math.abs(new Vector(origin, p).dot(v)) / v.magnitude();
         double percent = (d / v.magnitude());
@@ -30,9 +33,9 @@ public class GradientPigment implements Pigment {
 //        percent = Math.abs(percent);
 //        while(percent < 0) percent = 0.0 - percent;
 
-        while(percent >= 1) percent = 1.0 - (percent - 1.0);
+        while (percent >= 1) percent = 1.0 - (percent - 1.0);
 
-        return ColorUtil.blend(ColorUtil.intensify(start, (float)percent), ColorUtil.intensify(end, 1.0f - (float)percent));
+        return ColorUtil.blend(ColorUtil.intensify(start, (float) percent), ColorUtil.intensify(end, 1.0f - (float) percent));
     }
 
     public String toString() {

@@ -1,7 +1,9 @@
 package pt.ulisboa.tecnico.cnv.raytracer;
 
+import lombok.Getter;
 import pt.ulisboa.tecnico.cnv.shared.Request;
 
+@Getter
 class RaytracerRequest extends Request {
     private final byte[] input;
     private final byte[] texmap;

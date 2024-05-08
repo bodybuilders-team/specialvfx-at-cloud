@@ -1,6 +1,8 @@
 package pt.ulisboa.tecnico.cnv.raytracer.shapes;
 
-import pt.ulisboa.tecnico.cnv.raytracer.*;
+import pt.ulisboa.tecnico.cnv.raytracer.Ray;
+import pt.ulisboa.tecnico.cnv.raytracer.RayHit;
+import pt.ulisboa.tecnico.cnv.raytracer.Vector;
 
 public class Plane extends Shape {
     private final double a, b, c, d;
@@ -17,11 +19,11 @@ public class Plane extends Shape {
     public RayHit intersect(Ray ray) {
         // from http://www.tar.hu/gamealgorithms/ch22lev1sec2.html
         double denominator = (a * ray.direction.x + b * ray.direction.y + c * ray.direction.z);
-        if(denominator == 0.0) return null;
+        if (denominator == 0.0) return null;
 
-        double t = - (a * ray.origin.x + b * ray.origin.y + c * ray.origin.z + d) / denominator;
+        double t = -(a * ray.origin.x + b * ray.origin.y + c * ray.origin.z + d) / denominator;
 
-        if(t < 0) return null;
+        if (t < 0) return null;
 
         return new RayHit(ray, this, normal, t, true);
     }

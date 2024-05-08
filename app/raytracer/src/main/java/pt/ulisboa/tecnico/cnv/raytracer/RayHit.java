@@ -29,7 +29,7 @@ public class RayHit {
     }
 
     public Ray getReflectionRay() {
-        return new Ray(point, ray.direction.minus(normal.times(2.0*ray.direction.dot(normal))));
+        return new Ray(point, ray.direction.minus(normal.times(2.0 * ray.direction.dot(normal))));
     }
 
     public Ray getTransmissionRay() {
@@ -37,9 +37,9 @@ public class RayHit {
         Vector n = normal;
         double cosi = v.dot(n);
         double nint;
-        if(incoming) nint = 1.0 / shape.finish.ior;
+        if (incoming) nint = 1.0 / shape.finish.ior;
         else nint = shape.finish.ior;
-        double cost = Math.sqrt(1.0 - nint*nint * (1 - cosi*cosi));
+        double cost = Math.sqrt(1.0 - nint * nint * (1 - cosi * cosi));
 
         return new Ray(point, n.times(nint * cosi - cost).minus(v.times(nint)));
     }

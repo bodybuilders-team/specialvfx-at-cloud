@@ -1,6 +1,9 @@
 package pt.ulisboa.tecnico.cnv.raytracer.shapes;
 
-import pt.ulisboa.tecnico.cnv.raytracer.*;
+import pt.ulisboa.tecnico.cnv.raytracer.Point;
+import pt.ulisboa.tecnico.cnv.raytracer.Ray;
+import pt.ulisboa.tecnico.cnv.raytracer.RayHit;
+import pt.ulisboa.tecnico.cnv.raytracer.Vector;
 
 public class Triangle extends Shape {
     private final Point p1, p2, p3;
@@ -28,7 +31,7 @@ public class Triangle extends Shape {
     @Override
     public RayHit intersect(Ray ray) {
         RayHit planeHit = plane.intersect(ray);
-        if(planeHit == null) return null;
+        if (planeHit == null) return null;
 
         double uu, uv, vv, wu, wv, D;
         uu = u.dot(u);
@@ -38,13 +41,13 @@ public class Triangle extends Shape {
 
         wu = w.dot(u);
         wv = w.dot(v);
-        D = uv * uv  - uu * vv;
+        D = uv * uv - uu * vv;
 
         double s, t;
         s = (uv * wv - vv * wu) / D;
-        if(s < 0 || s > 1) return null;
+        if (s < 0 || s > 1) return null;
         t = (uv * wu - uu * wv) / D;
-        if(t < 0 || (s + t) > 1) return null;
+        if (t < 0 || (s + t) > 1) return null;
 
         return new RayHit(planeHit.ray, this, planeHit.normal, planeHit.point, true);
     }
