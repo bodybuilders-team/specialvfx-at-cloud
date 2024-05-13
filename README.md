@@ -76,3 +76,7 @@ following command:
 ```shell
 java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=RequestAnalyser:pt.ulisboa.tecnico.cnv.imageproc:output pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler app/imageproc/resources/cat.jpg app/imageproc/resources/output.jpg
 ```
+
+```shell
+java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=RequestAnalyser:pt.ulisboa.tecnico.cnv.imageproc,pt.ulisboa.tecnico.cnv.raytracer:output pt.ulisboa.tecnico.cnv.webserver.WebServer
+```
