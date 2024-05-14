@@ -23,6 +23,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Scanner;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -219,6 +220,7 @@ public class RayTracer {
      */
     public void readScene(byte[] input, byte[] texmap) {
         Scanner scanner = new Scanner(new ByteArrayInputStream(input));
+        scanner.useLocale(Locale.US);
 
         // read view
         Point eye = readPoint(scanner);
