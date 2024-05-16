@@ -53,8 +53,8 @@ The project contains the following components:
 ### Running the Application
 
 1. Make sure your `JAVA_HOME` environment variable is set to Java 11+ distribution
-2. Run `mvn clean package` in the root directory to build the application
-3. Run `java -jar app/webserver/target/webserver-1.0-SNAPSHOT-jar-with-dependencies.jar` to start the web server
+2. Run `mvn clean install` in the root directory to build the application
+3. Run `mvn exec:exec -f app/webserver` to start the web server using the instrumented classes
 
 To run a workload directly, you can use the following commands:
 

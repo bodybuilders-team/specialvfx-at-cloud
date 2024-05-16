@@ -1,7 +1,7 @@
 package pt.ulisboa.tecnico.cnv.imageproc;
 
 import lombok.Getter;
-import pt.ulisboa.tecnico.cnv.shared.Request;
+import pt.ulisboa.tecnico.cnv.mss.Request;
 
 import java.awt.image.BufferedImage;
 

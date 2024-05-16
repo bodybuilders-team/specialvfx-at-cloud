@@ -18,7 +18,7 @@ import java.util.List;
 /**
  * The DynamoDB implementation of the MetricStorageSystem interface.
  */
-public final class MSSDynamoDB implements MetricStorageSystem {
+public class MSSDynamoDB implements MetricStorageSystem {
     public static final String AWS_REGION = "us-west-2";
 
     public static final String TABLE_NAME = "requests";
@@ -67,10 +67,10 @@ public final class MSSDynamoDB implements MetricStorageSystem {
      * @return the request with the given ID
      */
     @Override
-    public List<Request> getRequestById(Request request) {
+    public Request getRequestById(Request request) {
         return dynamoDBMapper.query(
                 Request.class,
                 new DynamoDBQueryExpression<Request>().withHashKeyValues(request)
-        );
+        ).stream().findFirst().get();
     }
 }

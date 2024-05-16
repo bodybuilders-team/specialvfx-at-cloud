@@ -1,7 +1,5 @@
 package pt.ulisboa.tecnico.cnv.mss;
 
-import java.util.List;
-
 /**
  * The interface for a metric storage system that can save and retrieve requests.
  */
@@ -20,5 +18,5 @@ public interface MetricStorageSystem {
      * @param request the request to get
      * @return the request with the given ID
      */
-    List<Request> getRequestById(Request request);
+    Request getRequestById(Request request);
 }
