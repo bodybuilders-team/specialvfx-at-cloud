@@ -12,7 +12,7 @@ This project contains functionality to render 3D scenes with ray tracing.
 To run RayTracer locally in CLI, execute this command:
 
 ```
-java -cp target/raytracer-1.0.0-SNAPSHOT-jar-with-dependencies.jar pt.ulisboa.tecnico.cnv.raytracer.Main <input-scene-file.txt> <output-file.bmp> 400 300 400 300 0 0 [-tm=<texmap-file.bmp>] [-aa]
+java -cp target/raytracer-1.0.0-SNAPSHOT-jar-with-dependencies.jar pt.ulisboa.tecnico.cnv.raytracer.WebServer <input-scene-file.txt> <output-file.bmp> 400 300 400 300 0 0 [-tm=<texmap-file.bmp>] [-aa]
 ```
 
 Arguments in brackets are optional.
@@ -24,5 +24,5 @@ You can find some input scene files in the `resources` directory.
 For more details regarding the arguments just run this command:
 
 ```
-java -cp target/raytracer-1.0.0-SNAPSHOT-jar-with-dependencies.jar pt.ulisboa.tecnico.cnv.raytracer.Main
+java -cp target/raytracer-1.0.0-SNAPSHOT-jar-with-dependencies.jar pt.ulisboa.tecnico.cnv.raytracer.WebServer
 ```

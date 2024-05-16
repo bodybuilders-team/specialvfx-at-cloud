@@ -25,7 +25,6 @@ public class ImageProcessingRequest extends Request {
                 ", bblCount=" + bblCount +
                 ", instructionCount=" + instructionCount +
                 ", completed=" + completed +
-                ", opTime=" + opTime + "ns" +
                 '}';
     }
 }

@@ -45,6 +45,7 @@ public class JavassistAgent {
         String writeDestination = argSplits[2];
         List<String> packageNameList = Arrays.asList(packageNames.split(","));
         try {
+            System.out.println("Adding transformer");
             inst.addTransformer(getTransformer(toolName, packageNameList, writeDestination), true);
         } catch (Exception e) {
             logger.severe("Failed to add transformer: " + e.getMessage());

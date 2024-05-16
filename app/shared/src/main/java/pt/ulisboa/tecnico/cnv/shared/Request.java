@@ -13,7 +13,6 @@ public abstract class Request {
     protected boolean completed = false;
     protected long bblCount;
     protected long instructionCount;
-    protected long opTime;
 
     protected Request(long id) {
         this.id = id;

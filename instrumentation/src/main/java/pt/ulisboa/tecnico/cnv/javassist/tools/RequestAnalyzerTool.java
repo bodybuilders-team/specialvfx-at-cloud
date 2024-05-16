@@ -2,19 +2,16 @@ package pt.ulisboa.tecnico.cnv.javassist.tools;
 
 import javassist.CannotCompileException;
 import javassist.CtBehavior;
-import javassist.CtClass;
+import javassist.CtMethod;
+import javassist.bytecode.InstructionPrinter;
 import pt.ulisboa.tecnico.cnv.shared.Request;
 
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.logging.FileHandler;
-import java.util.logging.Logger;
-import java.util.logging.SimpleFormatter;
 
 /**
- * Analyser for image processing requests.
+ * Analyser for processing requests.
  * <p>
  * It keeps track of the basic block count and instruction count of each request.
  * Each request is stored in a map with the thread id as the key.
@@ -22,10 +19,10 @@ import java.util.logging.SimpleFormatter;
  * <p>
  * A thread only processes one request at a time.
  */
-public class RequestAnalyser extends AbstractJavassistTool {
-    private static final Map<Long, Request> threadRequests = new ConcurrentHashMap<>();
+public class RequestAnalyzerTool extends AbstractJavassistTool {
+    public static final Map<Long, Request> threadRequests = new ConcurrentHashMap<>();
 
-    public RequestAnalyser(List<String> packageNameList, String writeDestination) {
+    public RequestAnalyzerTool(List<String> packageNameList, String writeDestination) {
         super(packageNameList, writeDestination);
     }
 
@@ -39,27 +36,17 @@ public class RequestAnalyser extends AbstractJavassistTool {
     }
 
     /**
-     * Finalize the request by setting the operation time and marking it as completed.
-     * The request is then printed to the log.
-     *
-     * @param opTime the operation time
-     */
-    public static void finalizeRequest(long opTime) {
-        Long threadId = Thread.currentThread().getId();
-        Request storedRequest = threadRequests.get(threadId);
-        if (storedRequest != null) {
-            storedRequest.setCompleted(true);
-            storedRequest.setOpTime(opTime);
-        }
-    }
-
-    /**
      * Handle the request by storing it in the threadRequests map.
      *
      * @param request the request to be handled
      */
     public static void handleRequest(Request request) {
         threadRequests.put(Thread.currentThread().getId(), request);
+        Long threadId = Thread.currentThread().getId();
+        Request storedRequest = threadRequests.get(threadId);
+        if (storedRequest != null) {
+            storedRequest.setCompleted(true);
+        }
     }
 
     /**
@@ -70,6 +57,7 @@ public class RequestAnalyser extends AbstractJavassistTool {
     public static void incBasicBlock(int length) {
         Request request = threadRequests.get(Thread.currentThread().getId());
         if (request != null) {
+            // Iterate over the block mem accesses
             request.setBblCount(request.getBblCount() + 1);
             request.setInstructionCount(request.getInstructionCount() + length);
         }
@@ -80,25 +68,17 @@ public class RequestAnalyser extends AbstractJavassistTool {
         super.transform(behavior);
 
         if (behavior.getName().equals("process")) {
-            behavior.addLocalVariable("startTime", CtClass.longType);
-            behavior.insertBefore("startTime = System.nanoTime();");
-
-            behavior.insertBefore(String.format("%s.handleRequest(request);", RequestAnalyser.class.getName()));
-
-            StringBuilder builder = new StringBuilder();
-            behavior.addLocalVariable("endTime", CtClass.longType);
-            behavior.addLocalVariable("opTime", CtClass.longType);
-            builder.append("endTime = System.nanoTime();");
-            builder.append("opTime = endTime-startTime;");
-            behavior.insertAfter(builder.toString());
-
-            behavior.insertAfter(String.format("%s.finalizeRequest(opTime);", RequestAnalyser.class.getName()));
+            behavior.insertBefore(String.format("%s.handleRequest(request);", RequestAnalyzerTool.class.getName()));
         }
     }
 
     @Override
     protected void transform(BasicBlock block) throws CannotCompileException {
         super.transform(block);
-        block.behavior.insertAt(block.line, String.format("%s.incBasicBlock(%s);", RequestAnalyser.class.getName(), block.length));
+        if (!(block.behavior instanceof CtMethod method))
+            return;
+
+        block.behavior.insertAt(block.line, String.format("%s.incBasicBlock(%s);", RequestAnalyzerTool.class.getName(), block.length));
     }
+
 }
