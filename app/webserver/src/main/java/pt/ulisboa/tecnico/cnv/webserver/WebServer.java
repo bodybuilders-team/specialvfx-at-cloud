@@ -5,8 +5,10 @@ import com.sun.net.httpserver.HttpServer;
 import pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler;
 import pt.ulisboa.tecnico.cnv.imageproc.EnhanceImageHandler;
 import pt.ulisboa.tecnico.cnv.javassist.tools.RequestAnalyzerTool;
+import pt.ulisboa.tecnico.cnv.mss.MSSDynamoDB;
+import pt.ulisboa.tecnico.cnv.mss.MetricStorageSystem;
 import pt.ulisboa.tecnico.cnv.raytracer.RaytracerHandler;
-import pt.ulisboa.tecnico.cnv.shared.Request;
+import pt.ulisboa.tecnico.cnv.mss.Request;
 
 import java.net.InetSocketAddress;
 import java.util.logging.Logger;
@@ -23,14 +25,18 @@ public class WebServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
 
+        MetricStorageSystem metricStorageSystem = new MSSDynamoDB();
+
         Filter metricsRecorderFilter = Filter.afterHandler(
                 "Obtains the metrics of the request collected by the instrumentation tool and stores them",
                 httpExchange -> {
                     long threadId = Thread.currentThread().getId();
                     Request request = RequestAnalyzerTool.getThreadRequest(threadId);
 
-                    if (request != null)
+                    if (request != null) {
                         LOGGER.info(String.format("[%s] Request from thread %s: %s%n", RequestAnalyzerTool.class.getSimpleName(), threadId, request));
+                        metricStorageSystem.save(request);
+                    }
                 }
         );
 

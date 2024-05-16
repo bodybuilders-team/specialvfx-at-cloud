@@ -21,6 +21,7 @@
         <module>instrumentation</module>
         <module>loadbalancer</module>
         <module>autoscaler</module>
+        <module>mss</module>
     </modules>
 
     <dependencyManagement>

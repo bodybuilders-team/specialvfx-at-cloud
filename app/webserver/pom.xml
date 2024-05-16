@@ -28,6 +28,11 @@
             <artifactId>instrumentation</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
+        <dependency>
+            <groupId>pt.ulisboa.tecnico.cnv</groupId>
+            <artifactId>mss</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 
     <build>

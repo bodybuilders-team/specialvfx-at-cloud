@@ -3,8 +3,7 @@ package pt.ulisboa.tecnico.cnv.javassist.tools;
 import javassist.CannotCompileException;
 import javassist.CtBehavior;
 import javassist.CtMethod;
-import javassist.bytecode.InstructionPrinter;
-import pt.ulisboa.tecnico.cnv.shared.Request;
+import pt.ulisboa.tecnico.cnv.mss.Request;
 
 import java.util.List;
 import java.util.Map;

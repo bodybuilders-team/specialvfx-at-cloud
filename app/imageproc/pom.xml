@@ -30,8 +30,8 @@
         </dependency>
         <dependency>
             <groupId>pt.ulisboa.tecnico.cnv</groupId>
-            <artifactId>shared</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <artifactId>mss</artifactId>
+            <version>1.0-SNAPSHOT</version>
         </dependency>
     </dependencies>
 

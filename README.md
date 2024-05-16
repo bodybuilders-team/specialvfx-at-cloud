@@ -35,6 +35,10 @@ The project contains the following components:
     * [`webserver`](app/webserver) - The web server exposing the functionality of the workloads.
 * [`instrumentation`](instrumentation) - The instrumentation module that contains the code for collecting metrics with
   Javassist.
+* [`mss`](mss) - The Metric Storage System that stores the requests and metrics collected by the instrumentation module.
+* [`loadbalancer`](loadbalancer) - The load balancer that distributes the requests to the different instances of the
+  application.
+* [`autoscaler`](autoscaler) - The autoscaler that scales the number of instances of the application based on the load.
 * [`scripts`](scripts) - Scripts to automate instrumentation and deployment tasks;
     * [`aws`](scripts/aws) - Scripts to deploy the application to AWS;
     * [`instrumentation`](scripts/instrumentation) - Scripts to instrument the application.
@@ -60,23 +64,3 @@ To run a workload directly, you can use the following commands:
   Image: `java -cp app/target/imageproc-1.0.0-SNAPSHOT-jar-with-dependencies.jar pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler <input-file> <output-file>`
 * Enhance
   Image: `java -cp app/target/imageproc-1.0.0-SNAPSHOT-jar-with-dependencies.jar pt.ulisboa.tecnico.cnv.imageproc.EnhanceImageHandler <input-file> <output-file>`
-  `
-
-### Running the Instrumentation
-
-To instrument the Image Processing workload, you can use the following command:
-
-```shell
-java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=<tool name>:<package to instrument>:<path to write instrumented bytecodes> <class to instrument> <args>
-```
-
-For example, to instrument the `BlurImageHandler` class with the `ImageProcessingAnalyser` tool, you can use the
-following command:
-
-```shell
-java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=RequestAnalyser:pt.ulisboa.tecnico.cnv.imageproc:output pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler app/imageproc/resources/cat.jpg app/imageproc/resources/output.jpg
-```
-
-```shell
-java -cp . -javaagent:instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=RequestAnalyser:pt.ulisboa.tecnico.cnv.imageproc,pt.ulisboa.tecnico.cnv.raytracer:output pt.ulisboa.tecnico.cnv.webserver.WebServer
-```

@@ -1,7 +1,7 @@
 package pt.ulisboa.tecnico.cnv.raytracer;
 
 import lombok.Getter;
-import pt.ulisboa.tecnico.cnv.shared.Request;
+import pt.ulisboa.tecnico.cnv.mss.Request;
 
 @Getter
 class RaytracerRequest extends Request {

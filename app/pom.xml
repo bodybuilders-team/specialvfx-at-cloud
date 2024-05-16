@@ -21,7 +21,6 @@
         <module>raytracer</module>
         <module>imageproc</module>
         <module>webserver</module>
-        <module>shared</module>
     </modules>
 
 </project>
