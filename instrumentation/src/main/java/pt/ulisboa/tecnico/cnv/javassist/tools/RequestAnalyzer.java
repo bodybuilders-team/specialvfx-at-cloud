@@ -18,10 +18,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * A thread only processes one request at a time.
  */
-public class RequestAnalyzerTool extends AbstractJavassistTool {
+public class RequestAnalyzer extends AbstractJavassistTool {
     public static final Map<Long, Request> threadRequests = new ConcurrentHashMap<>();
 
-    public RequestAnalyzerTool(List<String> packageNameList, String writeDestination) {
+    public RequestAnalyzer(List<String> packageNameList, String writeDestination) {
         super(packageNameList, writeDestination);
     }
 
@@ -67,7 +67,7 @@ public class RequestAnalyzerTool extends AbstractJavassistTool {
         super.transform(behavior);
 
         if (behavior.getName().equals("process")) {
-            behavior.insertBefore(String.format("%s.handleRequest(request);", RequestAnalyzerTool.class.getName()));
+            behavior.insertBefore(String.format("%s.handleRequest(request);", RequestAnalyzer.class.getName()));
         }
     }
 
@@ -77,7 +77,7 @@ public class RequestAnalyzerTool extends AbstractJavassistTool {
         if (!(block.behavior instanceof CtMethod method))
             return;
 
-        block.behavior.insertAt(block.line, String.format("%s.incBasicBlock(%s);", RequestAnalyzerTool.class.getName(), block.length));
+        block.behavior.insertAt(block.line, String.format("%s.incBasicBlock(%s);", RequestAnalyzer.class.getName(), block.length));
     }
 
 }

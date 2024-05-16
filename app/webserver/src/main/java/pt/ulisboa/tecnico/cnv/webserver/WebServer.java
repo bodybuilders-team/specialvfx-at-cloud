@@ -4,7 +4,7 @@ import com.sun.net.httpserver.Filter;
 import com.sun.net.httpserver.HttpServer;
 import pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler;
 import pt.ulisboa.tecnico.cnv.imageproc.EnhanceImageHandler;
-import pt.ulisboa.tecnico.cnv.javassist.tools.RequestAnalyzerTool;
+import pt.ulisboa.tecnico.cnv.javassist.tools.RequestAnalyzer;
 import pt.ulisboa.tecnico.cnv.mss.MSSDynamoDB;
 import pt.ulisboa.tecnico.cnv.mss.MSSMemory;
 import pt.ulisboa.tecnico.cnv.mss.MetricStorageSystem;
@@ -21,7 +21,7 @@ public class WebServer {
 
     private static final int PORT = 8000;
     private static final Boolean MSS_DYNAMODB = false;
-    private static final Logger LOGGER = Logger.getLogger(RequestAnalyzerTool.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(RequestAnalyzer.class.getName());
 
     public static void main(String[] args) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
@@ -33,10 +33,10 @@ public class WebServer {
                 "Obtains the metrics of the request collected by the instrumentation tool and stores them",
                 httpExchange -> {
                     long threadId = Thread.currentThread().getId();
-                    Request request = RequestAnalyzerTool.getThreadRequest(threadId);
+                    Request request = RequestAnalyzer.getThreadRequest(threadId);
 
                     if (request != null) {
-                        LOGGER.info(String.format("[%s] Request from thread %s: %s%n", RequestAnalyzerTool.class.getSimpleName(), threadId, request));
+                        LOGGER.info(String.format("[%s] Request from thread %s: %s%n", RequestAnalyzer.class.getSimpleName(), threadId, request));
                         metricStorageSystem.save(request);
                     }
                 }

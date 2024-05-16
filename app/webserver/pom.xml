@@ -72,7 +72,7 @@
                     <executable>java</executable>
                     <arguments>
                         <argument>
-                            -javaagent:${basedir}/../../instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=RequestAnalyzerTool:pt.ulisboa.tecnico.cnv.imageproc,pt.ulisboa.tecnico.cnv.raytracer:output
+                            -javaagent:${basedir}/../../instrumentation/target/instrumentation-1.0-SNAPSHOT-jar-with-dependencies.jar=RequestAnalyzer:pt.ulisboa.tecnico.cnv.imageproc,pt.ulisboa.tecnico.cnv.raytracer:output
                         </argument>
                         <argument>-classpath</argument>
                         <classpath/>
