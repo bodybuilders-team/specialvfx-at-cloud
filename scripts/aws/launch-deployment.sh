@@ -77,6 +77,6 @@ aws cloudwatch put-metric-alarm \
     --threshold 20 \
     --comparison-operator LessThanThreshold \
     --dimensions Name=AutoScalingGroupName,Value=CNV-AutoScalingGroup \
-    --evaluation-periods 2 \
+    --evaluation-periods 1 \
     --alarm-actions $SCALE_IN_POLICY_ARN \
     --unit Percent
