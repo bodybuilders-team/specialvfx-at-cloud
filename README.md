@@ -17,6 +17,18 @@ Master in Computer Science and Computer Engineering<br>
 Cloud Computing and Virtualization - Group 4<br>
 Summer Semester of 2023/2024
 
+## Table of Contents
+
+- [SpecialVFX@Cloud](#specialvfxcloud)
+    - [Authors](#authors)
+    - [Table of Contents](#table-of-contents)
+    - [Overview](#overview)
+    - [Architecture](#architecture)
+    - [Usage](#usage)
+        - [Requirements](#requirements)
+        - [Running the Application](#running-the-application)
+        - [Deploying to AWS](#deploying-to-aws)
+
 ## Overview
 
 This project provides a simplified Java application designed to handle different types of requests:
@@ -40,8 +52,9 @@ The project contains the following components:
   application.
 * [`autoscaler`](autoscaler) - The autoscaler that scales the number of instances of the application based on the load.
 * [`scripts`](scripts) - Scripts to automate instrumentation and deployment tasks;
-    * [`aws`](scripts/aws) - Scripts to deploy the application to AWS;
-    * [`instrumentation`](scripts/instrumentation) - Scripts to instrument the application.
+    * [`aws`](scripts/aws) - Scripts to deploy the application to AWS.
+
+> **⚠️ NOTE**: The load balancer, autoscaler and mss are not totally implemented yet.
 
 ## Usage
 
@@ -64,3 +77,14 @@ To run a workload directly, you can use the following commands:
   Image: `java -cp app/target/imageproc-1.0.0-SNAPSHOT-jar-with-dependencies.jar pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler <input-file> <output-file>`
 * Enhance
   Image: `java -cp app/target/imageproc-1.0.0-SNAPSHOT-jar-with-dependencies.jar pt.ulisboa.tecnico.cnv.imageproc.EnhanceImageHandler <input-file> <output-file>`
+
+### Deploying to AWS
+
+To deploy the application to AWS, you can use the provided scripts in the `scripts/aws` directory. The scripts require
+the AWS CLI to be installed and configured with the necessary permissions.
+
+1. Configure the `scripts/aws/config.sh` file with the necessary parameters;
+2. Run `./scripts/aws/create-image.sh` to create an AMI with the application;
+3. Run `./scripts/aws/launch-deployment.sh` to deploy the application to AWS.
+
+To remove the deployment, you can run `./scripts/aws/terminate-deployment.sh`.

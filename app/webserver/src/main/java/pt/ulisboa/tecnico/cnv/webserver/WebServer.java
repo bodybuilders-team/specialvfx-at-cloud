@@ -6,7 +6,6 @@ import pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler;
 import pt.ulisboa.tecnico.cnv.imageproc.EnhanceImageHandler;
 import pt.ulisboa.tecnico.cnv.javassist.tools.RequestAnalyzer;
 import pt.ulisboa.tecnico.cnv.mss.MSSDynamoDB;
-import pt.ulisboa.tecnico.cnv.mss.MSSFile;
 import pt.ulisboa.tecnico.cnv.mss.MetricStorageSystem;
 import pt.ulisboa.tecnico.cnv.mss.Request;
 import pt.ulisboa.tecnico.cnv.raytracer.RaytracerHandler;
