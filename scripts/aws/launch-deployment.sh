@@ -6,7 +6,7 @@ source config.sh
 aws elb create-load-balancer \
 	--load-balancer-name CNV-LoadBalancer \
 	--listeners "Protocol=HTTP,LoadBalancerPort=80,InstanceProtocol=HTTP,InstancePort=8000" \
-	--availability-zones us-east-2a
+	--availability-zones eu-west-3c
 
 aws elb configure-health-check \
 	--load-balancer-name CNV-LoadBalancer \

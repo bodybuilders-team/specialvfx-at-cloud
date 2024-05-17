@@ -3,13 +3,13 @@
 source config.sh
 
 # Step 1: launch a vm instance.
-$DIR/launch-vm.sh
+"$SCRIPT_DIR"/launch-vm.sh
 
 # Step 2: install software in the VM instance.
-$DIR/install-vm.sh
+"$SCRIPT_DIR"/install-vm.sh
 
 # Step 3: test VM instance.
-$DIR/test-vm.sh
+"$SCRIPT_DIR"/test-vm.sh
 
 # Step 4: create VM image (AIM).
 aws ec2 create-image --instance-id $(cat instance.id) --name CNV-Image | jq -r .ImageId > image.id

@@ -1,6 +1,7 @@
 #!/bin/bash
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+PROJECT_DIR="$( cd "$SCRIPT_DIR/../../" && pwd )"
 
 export PATH=~/aws-cli-bin:$PATH
 export AWS_DEFAULT_REGION=eu-west-3
