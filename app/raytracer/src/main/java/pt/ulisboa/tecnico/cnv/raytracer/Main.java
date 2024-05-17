@@ -11,7 +11,7 @@ import java.util.Optional;
 
 public class Main {
     public static final boolean DEBUG = false;
-//            "        -nocap    - cylinders and cones are infinite";
+    //            "        -nocap    - cylinders and cones are infinite";
     private static final String USAGE = "Usage:\n" +
             "java -cp src raytracer.Main infile outfule scols srows wcols wrows coff roff [-tm=texmap.bmp] [-options]\n" +
             "\n" +

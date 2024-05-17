@@ -47,7 +47,7 @@ The project contains the following components:
 
 ### Requirements
 
-* Java 11+
+* Java 17+
 * Maven 3.6.3+
 
 ### Running the Application

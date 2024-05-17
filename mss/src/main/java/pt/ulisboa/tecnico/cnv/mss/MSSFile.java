@@ -15,10 +15,9 @@ import java.util.Map;
  */
 public class MSSFile implements MetricStorageSystem {
 
-    private Map<Long, Request> requests = new HashMap<>();
-    private final static String OUTPUT_FILE = "requests.json";
+    private static final String OUTPUT_FILE = "requests.json";
     private final Object lock = new Object();
-
+    private Map<Long, Request> requests = new HashMap<>();
 
     @Override
     public void save(Request request) {
@@ -36,8 +35,9 @@ public class MSSFile implements MetricStorageSystem {
         synchronized (lock) {
 
             try (FileReader reader = new FileReader(OUTPUT_FILE)) {
-                requests = new Gson().fromJson(reader, new TypeToken<>() {
-                }.getType());
+                requests = new Gson()
+                        .fromJson(reader, new TypeToken<>() {
+                        }.getType());
 
                 return requests.get(request.getId());
             } catch (IOException e) {

@@ -3,9 +3,6 @@ package pt.ulisboa.tecnico.cnv;
 import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.services.cloudwatch.Metric;
 import software.amazon.awscdk.services.route53.HostedZone;
-import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
-import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataRequest;
-import software.amazon.awssdk.services.cloudwatch.model.MetricDataQuery;
 
 import java.util.HashMap;
 import java.util.Map;

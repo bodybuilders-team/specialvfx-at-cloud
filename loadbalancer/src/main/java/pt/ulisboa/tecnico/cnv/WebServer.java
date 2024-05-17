@@ -1,7 +1,6 @@
 package pt.ulisboa.tecnico.cnv;
 
 import com.sun.net.httpserver.HttpServer;
-import pt.ulisboa.tecnico.cnv.LoadBalancerHandler;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
