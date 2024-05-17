@@ -26,7 +26,7 @@ aws autoscaling create-auto-scaling-group \
 	--auto-scaling-group-name CNV-AutoScalingGroup \
 	--launch-configuration-name CNV-LaunchConfiguration \
 	--load-balancer-names CNV-LoadBalancer \
-	--availability-zones us-east-2a \
+	--availability-zones eu-west-3c \
 	--health-check-type ELB \
 	--health-check-grace-period 60 \
 	--min-size 1 \
