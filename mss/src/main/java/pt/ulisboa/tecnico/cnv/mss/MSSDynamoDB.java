@@ -1,27 +1,23 @@
 package pt.ulisboa.tecnico.cnv.mss;
 
 import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
+import software.amazon.awssdk.core.internal.waiters.ResponseOrException;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.enhanced.dynamodb.model.GetItemEnhancedRequest;
-import software.amazon.awssdk.enhanced.dynamodb.model.PutItemEnhancedRequest;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
-import software.amazon.awssdk.services.dynamodb.model.AttributeDefinition;
-import software.amazon.awssdk.services.dynamodb.model.CreateTableRequest;
-import software.amazon.awssdk.services.dynamodb.model.KeySchemaElement;
-import software.amazon.awssdk.services.dynamodb.model.KeyType;
+import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
 import software.amazon.awssdk.services.dynamodb.model.ResourceInUseException;
-import software.amazon.awssdk.services.dynamodb.model.ScalarAttributeType;
+import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 
 import java.net.URI;
 
 public class MSSDynamoDB implements MetricStorageSystem {
-    public static final String AWS_REGION = "us-west-2";
+    public static final String AWS_REGION = "eu-west-3";
     public static final String TABLE_NAME = "requests";
-    public static final String TABLE_KEY = "request_id";
 
     private static final DynamoDbClient dynamoDbClient;
     private static final DynamoDbEnhancedClient enhancedClient;
@@ -47,29 +43,36 @@ public class MSSDynamoDB implements MetricStorageSystem {
 
         requestTable = enhancedClient.table(TABLE_NAME, TableSchema.fromBean(Request.class));
 
-        // Create the table if it doesn't exist
-        CreateTableRequest createTableRequest = CreateTableRequest.builder()
-                .tableName(TABLE_NAME)
-                .keySchema(KeySchemaElement.builder().attributeName(TABLE_KEY).keyType(KeyType.HASH).build())
-                .attributeDefinitions(AttributeDefinition.builder().attributeName(TABLE_KEY).attributeType(ScalarAttributeType.S).build())
-                .provisionedThroughput(ProvisionedThroughput.builder().readCapacityUnits(1L).writeCapacityUnits(1L).build())
-                .build();
-
         try {
-            dynamoDbClient.createTable(createTableRequest);
-            dynamoDbClient.waiter().waitUntilTableExists(r -> r.tableName(TABLE_NAME));
-        } catch (ResourceInUseException e) {
-            // Table already exists
+            requestTable.createTable(r ->
+                    r.provisionedThroughput(
+                            ProvisionedThroughput.builder()
+                                    .readCapacityUnits(10L)
+                                    .writeCapacityUnits(10L)
+                                    .build()
+                    )
+            );
+
+            try (DynamoDbWaiter waiter = DynamoDbWaiter.builder().client(dynamoDbClient).build()) { // DynamoDbWaiter is Autocloseable
+                ResponseOrException<DescribeTableResponse> response = waiter
+                        .waitUntilTableExists(r -> r.tableName(TABLE_NAME).build())
+                        .matched();
+                DescribeTableResponse tableDescription = response.response().orElseThrow(
+                        () -> new RuntimeException("Customer table was not created."));
+
+                System.out.println("Table " + tableDescription.table() + " has been created.");
+            }
+        } catch (ResourceInUseException ignored) {
         }
     }
 
     @Override
     public void save(Request request) {
-        requestTable.putItem(PutItemEnhancedRequest.builder(Request.class).item(request).build());
+        requestTable.putItem(request);
     }
 
     @Override
     public Request getRequestById(Request request) {
-        return requestTable.getItem(GetItemEnhancedRequest.builder().key(k -> k.partitionValue(request.getId())).build());
+        return requestTable.getItem(GetItemEnhancedRequest.builder().key(k -> k.partitionValue(request.getIdKey())).build());
     }
 }

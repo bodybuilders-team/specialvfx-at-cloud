@@ -1,6 +1,8 @@
 package pt.ulisboa.tecnico.cnv;
 
 import com.sun.net.httpserver.HttpServer;
+import pt.ulisboa.tecnico.cnv.mss.MSSDynamoDB;
+import pt.ulisboa.tecnico.cnv.mss.MetricStorageSystem;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -14,7 +16,9 @@ public class WebServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
 
-        server.createContext("/", new LoadBalancerHandler());
+        MetricStorageSystem metricStorageSystem = new MSSDynamoDB();
+
+        server.createContext("/", new LoadBalancerHandler(metricStorageSystem));
 
         server.start();
         System.out.println("Server started on http://localhost:" + PORT + "/");

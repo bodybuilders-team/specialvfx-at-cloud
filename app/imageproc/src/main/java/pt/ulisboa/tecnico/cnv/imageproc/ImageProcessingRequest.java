@@ -20,7 +20,7 @@ public class ImageProcessingRequest extends Request {
     @Override
     public String toString() {
         return "ImageProcessingRequest{" +
-                "id=" + id +
+                "id=" + idKey +
                 ", imageSize=" + image.getWidth() + "x" + image.getHeight() +
                 ", bblCount=" + bblCount +
                 ", instructionCount=" + instructionCount +

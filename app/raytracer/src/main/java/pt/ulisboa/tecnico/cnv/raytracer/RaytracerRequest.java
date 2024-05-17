@@ -29,7 +29,7 @@ class RaytracerRequest extends Request {
     @Override
     public String toString() {
         return "RaytracerRequest{" +
-                "id=" + id +
+                "id=" + idKey +
                 ", scols=" + scols +
                 ", srows=" + srows +
                 ", wcols=" + wcols +

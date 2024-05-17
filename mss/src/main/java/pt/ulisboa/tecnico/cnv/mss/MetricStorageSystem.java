@@ -19,4 +19,5 @@ public interface MetricStorageSystem {
      * @return the request with the given ID
      */
     Request getRequestById(Request request);
+
 }

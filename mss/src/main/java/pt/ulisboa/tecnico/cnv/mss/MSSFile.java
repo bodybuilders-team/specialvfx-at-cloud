@@ -21,7 +21,7 @@ public class MSSFile implements MetricStorageSystem {
 
     @Override
     public void save(Request request) {
-        requests.put(request.getId(), request);
+        requests.put(request.getIdKey(), request);
 
         try (Writer writer = new FileWriter(OUTPUT_FILE)) {
             new Gson().toJson(requests, writer);
@@ -39,7 +39,7 @@ public class MSSFile implements MetricStorageSystem {
                         .fromJson(reader, new TypeToken<>() {
                         }.getType());
 
-                return requests.get(request.getId());
+                return requests.get(request.getIdKey());
             } catch (IOException e) {
                 throw new RuntimeException(e);
             }

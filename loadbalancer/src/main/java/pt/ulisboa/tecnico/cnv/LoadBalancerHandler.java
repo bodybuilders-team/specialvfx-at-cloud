@@ -2,6 +2,7 @@ package pt.ulisboa.tecnico.cnv;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import pt.ulisboa.tecnico.cnv.mss.MetricStorageSystem;
 
 import java.io.IOException;
 import java.util.LinkedList;
@@ -13,6 +14,11 @@ public class LoadBalancerHandler implements HttpHandler {
             List.of("http://localhost:8000", "http://localhost:8001", "http://localhost:8002")
     );
     final AtomicInteger currentServer = new AtomicInteger();
+    private final MetricStorageSystem metricStorageSystem;
+
+    public LoadBalancerHandler(MetricStorageSystem metricStorageSystem) {
+        this.metricStorageSystem = metricStorageSystem;
+    }
 
     @Override
     public void handle(HttpExchange exchange) throws IOException {
