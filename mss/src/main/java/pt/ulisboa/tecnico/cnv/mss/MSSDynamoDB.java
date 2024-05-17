@@ -1,76 +1,69 @@
 package pt.ulisboa.tecnico.cnv.mss;
 
-import com.amazonaws.auth.EnvironmentVariableCredentialsProvider;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDB;
-import com.amazonaws.services.dynamodbv2.AmazonDynamoDBClientBuilder;
-import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBMapper;
-import com.amazonaws.services.dynamodbv2.datamodeling.DynamoDBQueryExpression;
-import com.amazonaws.services.dynamodbv2.model.AttributeDefinition;
-import com.amazonaws.services.dynamodbv2.model.CreateTableRequest;
-import com.amazonaws.services.dynamodbv2.model.KeySchemaElement;
-import com.amazonaws.services.dynamodbv2.model.KeyType;
-import com.amazonaws.services.dynamodbv2.model.ProvisionedThroughput;
-import com.amazonaws.services.dynamodbv2.model.ScalarAttributeType;
-import com.amazonaws.services.dynamodbv2.util.TableUtils;
+import software.amazon.awssdk.auth.credentials.EnvironmentVariableCredentialsProvider;
+import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
+import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
+import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
+import software.amazon.awssdk.enhanced.dynamodb.model.GetItemEnhancedRequest;
+import software.amazon.awssdk.enhanced.dynamodb.model.PutItemEnhancedRequest;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
+import software.amazon.awssdk.services.dynamodb.model.*;
 
-import java.util.List;
+import java.net.URI;
 
-/**
- * The DynamoDB implementation of the MetricStorageSystem interface.
- */
 public class MSSDynamoDB implements MetricStorageSystem {
     public static final String AWS_REGION = "us-west-2";
-
     public static final String TABLE_NAME = "requests";
     public static final String TABLE_KEY = "request_id";
 
-    private static final AmazonDynamoDB dynamoDB;
-    private static final DynamoDBMapper dynamoDBMapper;
+    private static final DynamoDbClient dynamoDbClient;
+    private static final DynamoDbEnhancedClient enhancedClient;
+    private static final DynamoDbTable<Request> requestTable;
+    private static final boolean LOCAL = false;
+
+    private static final String LOCAL_ENDPOINT = "http://localhost:8010";
 
     static {
-        // Initialize the DynamoDB client and mapper
-        dynamoDB = AmazonDynamoDBClientBuilder.standard()
-                .withCredentials(new EnvironmentVariableCredentialsProvider())
-                .withRegion(AWS_REGION)
+        // Initialize the DynamoDB client and enhanced client
+        final var builder = DynamoDbClient.builder()
+                .region(Region.of(AWS_REGION))
+                .credentialsProvider(EnvironmentVariableCredentialsProvider.create());
+
+        if (LOCAL)
+            builder.endpointOverride(URI.create(LOCAL_ENDPOINT));
+
+        dynamoDbClient = builder.build();
+
+        enhancedClient = DynamoDbEnhancedClient.builder()
+                .dynamoDbClient(dynamoDbClient)
                 .build();
-        dynamoDBMapper = new DynamoDBMapper(dynamoDB);
+
+        requestTable = enhancedClient.table(TABLE_NAME, TableSchema.fromBean(Request.class));
 
         // Create the table if it doesn't exist
-        TableUtils.createTableIfNotExists(dynamoDB, new CreateTableRequest()
-                .withTableName(TABLE_NAME)
-                .withKeySchema(new KeySchemaElement().withAttributeName(TABLE_KEY).withKeyType(KeyType.HASH))
-                .withAttributeDefinitions(new AttributeDefinition().withAttributeName(TABLE_KEY).withAttributeType(ScalarAttributeType.S))
-                .withProvisionedThroughput(new ProvisionedThroughput().withReadCapacityUnits(1L).withWriteCapacityUnits(1L))
-        );
+        CreateTableRequest createTableRequest = CreateTableRequest.builder()
+                .tableName(TABLE_NAME)
+                .keySchema(KeySchemaElement.builder().attributeName(TABLE_KEY).keyType(KeyType.HASH).build())
+                .attributeDefinitions(AttributeDefinition.builder().attributeName(TABLE_KEY).attributeType(ScalarAttributeType.S).build())
+                .provisionedThroughput(ProvisionedThroughput.builder().readCapacityUnits(1L).writeCapacityUnits(1L).build())
+                .build();
 
         try {
-            TableUtils.waitUntilActive(dynamoDB, TABLE_NAME);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+            dynamoDbClient.createTable(createTableRequest);
+            dynamoDbClient.waiter().waitUntilTableExists(r -> r.tableName(TABLE_NAME));
+        } catch (ResourceInUseException e) {
+            // Table already exists
         }
     }
 
-    /**
-     * Private constructor to prevent instantiation.
-     *
-     * @param request the request to save
-     */
     @Override
     public void save(Request request) {
-        dynamoDBMapper.save(request);
+        requestTable.putItem(PutItemEnhancedRequest.builder(Request.class).item(request).build());
     }
 
-    /**
-     * Get a request by its ID.
-     *
-     * @param request the request to get
-     * @return the request with the given ID
-     */
     @Override
     public Request getRequestById(Request request) {
-        return dynamoDBMapper.query(
-                Request.class,
-                new DynamoDBQueryExpression<Request>().withHashKeyValues(request)
-        ).stream().findFirst().get();
+        return requestTable.getItem(GetItemEnhancedRequest.builder().key(k -> k.partitionValue(request.getId())).build());
     }
 }

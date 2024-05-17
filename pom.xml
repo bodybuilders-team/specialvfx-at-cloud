@@ -10,6 +10,8 @@
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <maven.compiler.source>17</maven.compiler.source>
+        <maven.compiler.target>17</maven.compiler.target>
     </properties>
 
     <!-- Modules are subcomponents of the project.
@@ -17,11 +19,11 @@
         sorts the projects into the correct build order;
         builds the selected projects in order. -->
     <modules>
+        <module>mss</module>
         <module>app</module>
         <module>instrumentation</module>
         <module>loadbalancer</module>
         <module>autoscaler</module>
-        <module>mss</module>
     </modules>
 
     <dependencyManagement>
@@ -33,7 +35,6 @@
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-
         </dependencies>
     </dependencyManagement>
 

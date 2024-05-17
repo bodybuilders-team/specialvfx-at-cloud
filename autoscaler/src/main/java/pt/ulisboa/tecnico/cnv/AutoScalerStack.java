@@ -4,7 +4,8 @@ import software.amazon.awscdk.Stack;
 import software.amazon.awscdk.services.cloudwatch.Metric;
 import software.amazon.awscdk.services.route53.HostedZone;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
-import software.amazon.awssdk.services.cloudwatch.CloudWatchClientBuilder;
+import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataRequest;
+import software.amazon.awssdk.services.cloudwatch.model.MetricDataQuery;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -19,6 +20,16 @@ public class AutoScalerStack extends Stack {
                 .namespace("AWS/EC2")
                 .metricName("CPUUtilization")
                 .build();
+
+//        try (var client = CloudWatchClient.builder().build()) {
+//
+//            client.getMetricStatistics(GetMetricDataRequest.builder()
+//                    .metricDataQueries(
+//                            MetricDataQuery.builder()
+//                                    .build()
+//                    )
+//                    .build());
+//        }
 
     }
 }

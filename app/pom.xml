@@ -9,10 +9,6 @@
     <packaging>pom</packaging>
     <name>app</name>
 
-    <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    </properties>
-
     <!-- Modules are subcomponents of the project.
         The reactor collects all the available modules to build;
         sorts the projects into the correct build order;

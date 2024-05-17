@@ -6,7 +6,8 @@ import pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler;
 import pt.ulisboa.tecnico.cnv.imageproc.EnhanceImageHandler;
 import pt.ulisboa.tecnico.cnv.javassist.tools.RequestAnalyzer;
 import pt.ulisboa.tecnico.cnv.mss.MSSDynamoDB;
-import pt.ulisboa.tecnico.cnv.mss.MSSMemory;
+import pt.ulisboa.tecnico.cnv.mss
+        .MSSFile;
 import pt.ulisboa.tecnico.cnv.mss.MetricStorageSystem;
 import pt.ulisboa.tecnico.cnv.mss.Request;
 import pt.ulisboa.tecnico.cnv.raytracer.RaytracerHandler;
@@ -20,14 +21,14 @@ import java.util.logging.Logger;
 public class WebServer {
 
     private static final int PORT = 8000;
-    private static final Boolean MSS_DYNAMODB = false;
+    private static final Boolean MSS_DYNAMODB = true;
     private static final Logger LOGGER = Logger.getLogger(RequestAnalyzer.class.getName());
 
     public static void main(String[] args) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
 
-        MetricStorageSystem metricStorageSystem = MSS_DYNAMODB ? new MSSDynamoDB() : new MSSMemory();
+        MetricStorageSystem metricStorageSystem = MSS_DYNAMODB ? new MSSDynamoDB() : new MSSFile();
 
         Filter metricsRecorderFilter = Filter.afterHandler(
                 "Obtains the metrics of the request collected by the instrumentation tool and stores them",
