@@ -1,7 +1,7 @@
 package pt.ulisboa.tecnico.cnv.imageproc;
 
 import lombok.Getter;
-import pt.ulisboa.tecnico.cnv.mss.Request;
+import pt.ulisboa.tecnico.cnv.javassist.Request;
 
 import java.awt.image.BufferedImage;
 
@@ -12,19 +12,18 @@ import java.awt.image.BufferedImage;
 public class ImageProcessingRequest extends Request {
     private final BufferedImage image;
 
-    public ImageProcessingRequest(long id, BufferedImage image) {
-        super(id);
+    public ImageProcessingRequest(BufferedImage image) {
         this.image = image;
     }
 
     @Override
     public String toString() {
         return "ImageProcessingRequest{" +
-                "id=" + idKey +
+                "id=" + getId() +
                 ", imageSize=" + image.getWidth() + "x" + image.getHeight() +
-                ", bblCount=" + bblCount +
-                ", instructionCount=" + instructionCount +
-                ", completed=" + completed +
+                ", bblCount=" + getBblCount() +
+                ", instructionCount=" + getInstructionCount() +
+                ", completed=" + isCompleted() +
                 '}';
     }
 }

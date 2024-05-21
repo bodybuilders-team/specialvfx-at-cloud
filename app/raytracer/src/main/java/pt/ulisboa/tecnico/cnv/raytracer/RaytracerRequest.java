@@ -1,10 +1,10 @@
 package pt.ulisboa.tecnico.cnv.raytracer;
 
 import lombok.Getter;
-import pt.ulisboa.tecnico.cnv.mss.Request;
+import pt.ulisboa.tecnico.cnv.javassist.Request;
 
 @Getter
-class RaytracerRequest extends Request {
+public class RaytracerRequest extends Request {
     private final byte[] input;
     private final byte[] texmap;
     private final int scols;
@@ -14,8 +14,7 @@ class RaytracerRequest extends Request {
     private final int coff;
     private final int roff;
 
-    protected RaytracerRequest(long id, byte[] input, byte[] texmap, int scols, int srows, int wcols, int wrows, int coff, int roff) {
-        super(id);
+    protected RaytracerRequest(byte[] input, byte[] texmap, int scols, int srows, int wcols, int wrows, int coff, int roff) {
         this.input = input;
         this.texmap = texmap;
         this.scols = scols;
@@ -29,16 +28,16 @@ class RaytracerRequest extends Request {
     @Override
     public String toString() {
         return "RaytracerRequest{" +
-                "id=" + idKey +
+                "id=" + getId() +
                 ", scols=" + scols +
                 ", srows=" + srows +
                 ", wcols=" + wcols +
                 ", wrows=" + wrows +
                 ", coff=" + coff +
                 ", roff=" + roff +
-                ", bblCount=" + bblCount +
-                ", instructionCount=" + instructionCount +
-                ", completed=" + completed +
+                ", bblCount=" + getBblCount() +
+                ", instructionCount=" + getInstructionCount() +
+                ", completed=" + isCompleted() +
                 '}';
     }
 }

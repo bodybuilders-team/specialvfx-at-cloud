@@ -21,8 +21,6 @@ import java.util.stream.Collectors;
 
 public abstract class ImageProcessingHandler implements HttpHandler, RequestHandler<Map<String, String>, String> {
 
-    private static final AtomicLong idCounter = new AtomicLong(0);
-
     abstract BufferedImage process(ImageProcessingRequest request) throws IOException;
 
     private String handleRequest(String inputEncoded, String format) {
@@ -30,7 +28,7 @@ public abstract class ImageProcessingHandler implements HttpHandler, RequestHand
         try {
             ByteArrayInputStream bais = new ByteArrayInputStream(decoded);
             BufferedImage bi = ImageIO.read(bais);
-            ImageProcessingRequest request = new ImageProcessingRequest(idCounter.getAndIncrement(), bi);
+            ImageProcessingRequest request = new ImageProcessingRequest(bi);
             bi = process(request);
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ImageIO.write(bi, format, baos);

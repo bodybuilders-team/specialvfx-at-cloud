@@ -33,6 +33,11 @@
             <artifactId>lombok</artifactId>
             <version>1.18.32</version>
         </dependency>
+        <dependency>
+            <groupId>pt.ulisboa.tecnico.cnv</groupId>
+            <artifactId>instrumentation</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 
     <build>
