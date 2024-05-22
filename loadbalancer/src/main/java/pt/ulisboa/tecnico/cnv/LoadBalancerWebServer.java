@@ -6,9 +6,14 @@ import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricDyna
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricRepository;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RayTracerRequestMetricDynamoDbRepositoryImpl;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetricRepository;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
+import software.amazon.awssdk.services.ec2.Ec2Client;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 public class LoadBalancerWebServer {
@@ -21,11 +26,31 @@ public class LoadBalancerWebServer {
 
         DynamoDbClientManager dynamoDbClientManager = new DynamoDbClientManager();
 
+        final Map<String, ServerInstanceInfo> instanceInfoMap = new ConcurrentHashMap<>();
+        final Region region = Region.EU_WEST_3;
+        final Ec2Client ec2Client = Ec2Client.builder().region(region).build();
+
+        // Load instances from aws
+
+        final var instances = AwsUtils.getInstances(ec2Client);
+
+        for (var instance : instances)
+            instanceInfoMap.put(instance.instanceId(), new ServerInstanceInfo(instance));
+
+        if (instanceInfoMap.isEmpty()) {
+            System.out.println("No instances found, launching a new one");
+            final var instance = AwsUtils.launchInstance(ec2Client);
+            instanceInfoMap.put(instance.instanceId(), new ServerInstanceInfo(instance));
+        }
+
         RaytracerRequestMetricRepository raytracerRequestMetricRepository = new RayTracerRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
         ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository = new ImageProcessorRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
 
-        server.createContext("/", new LoadBalancerHandler(raytracerRequestMetricRepository,imageProcessorRequestMetricRepository));
+        AutoScaler autoScaler = new AutoScaler(instanceInfoMap);
 
+        autoScaler.start();
+
+        server.createContext("/", new LoadBalancerHandler(instanceInfoMap, raytracerRequestMetricRepository, imageProcessorRequestMetricRepository));
         server.start();
         System.out.println("Server started on http://localhost:" + PORT + "/");
     }

@@ -1,16 +1,13 @@
 package pt.ulisboa.tecnico.cnv.mss.imageprocessor;
 
 import pt.ulisboa.tecnico.cnv.mss.DynamoDbClientManager;
-import software.amazon.awssdk.core.internal.waiters.ResponseOrException;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
 import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
-import software.amazon.awssdk.services.dynamodb.model.DescribeTableResponse;
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
 import software.amazon.awssdk.services.dynamodb.model.ResourceInUseException;
-import software.amazon.awssdk.services.dynamodb.waiters.DynamoDbWaiter;
 
 import java.util.Comparator;
 import java.util.List;
@@ -40,16 +37,7 @@ public class ImageProcessorRequestMetricDynamoDbRepositoryImpl implements ImageP
                     )
             );
 
-            try (DynamoDbWaiter waiter = DynamoDbWaiter.builder().client(dynamoDbClient).build()) { // DynamoDbWaiter is Autocloseable
-                ResponseOrException<DescribeTableResponse> response = waiter
-                        .waitUntilTableExists(r -> r.tableName(TABLE_NAME).build())
-                        .matched();
-
-                DescribeTableResponse tableDescription = response.response().orElseThrow(
-                        () -> new RuntimeException("Table was not created."));
-
-                System.out.println("Table " + tableDescription.table() + " has been created.");
-            }
+            dynamoDbClient.waiter().waitUntilTableExists(r -> r.tableName(TABLE_NAME));
         } catch (ResourceInUseException ignored) {
 
         }

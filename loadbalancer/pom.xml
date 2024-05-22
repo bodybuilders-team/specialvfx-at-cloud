@@ -50,7 +50,13 @@
             <version>${slf4j.version}</version>
             <scope>runtime</scope>
         </dependency>
-
-
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>cloudwatch</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>ec2</artifactId>
+        </dependency>
     </dependencies>
 </project>
