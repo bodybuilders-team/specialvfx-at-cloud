@@ -30,12 +30,13 @@ public class LoadBalancerWebServer {
         final Region region = Region.EU_WEST_3;
         final Ec2Client ec2Client = Ec2Client.builder().region(region).build();
 
-        // Load instances from aws
-
         final var instances = AwsUtils.getInstances(ec2Client);
 
-        for (var instance : instances)
+        System.out.println("Found " + instances.size() + " instances");
+        for (var instance : instances) {
             instanceInfoMap.put(instance.instanceId(), new ServerInstanceInfo(instance));
+            System.out.println("Instance " + instance.instanceId() + " added");
+        }
 
         if (instanceInfoMap.isEmpty()) {
             System.out.println("No instances found, launching a new one");

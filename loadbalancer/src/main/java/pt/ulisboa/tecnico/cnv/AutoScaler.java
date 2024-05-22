@@ -32,6 +32,8 @@ public class AutoScaler {
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                e.printStackTrace();
             } finally {
                 monitor.unlock();
             }
@@ -39,15 +41,18 @@ public class AutoScaler {
 
         //TODO: Temporary, remove after notifying in the loadbalancer
         new Thread(() -> {
-            monitor.lock();
             try {
                 while (true) {
                     Thread.sleep(1000);
 
-                    condition.signal();
+                    monitor.lock();
+                    condition.signalAll();
+                    monitor.unlock();
                 }
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
+            } catch (Exception e) {
+                e.printStackTrace();
             } finally {
                 monitor.unlock();
             }
@@ -68,10 +73,11 @@ public class AutoScaler {
         // Check if we need to scale up or down
         final var averageCpuUsage = instanceInfoMap.values().stream().mapToDouble(ServerInstanceInfo::getCpuUsage).average().orElse(0);
 
-        if (averageCpuUsage > 0.6) {
+        System.out.println("averageCpuUsage = " + averageCpuUsage);
+        if (averageCpuUsage > 60) {
             final var instance = AwsUtils.launchInstance(ec2Client);
             instanceInfoMap.put(instance.instanceId(), new ServerInstanceInfo(instance));
-        } else if (averageCpuUsage < 0.3) {
+        } else if (averageCpuUsage < 30 && instanceInfoMap.size() > 1) {
             instanceInfoMap
                     .values().stream()
                     .min(Comparator.comparingDouble(ServerInstanceInfo::getCpuUsage))

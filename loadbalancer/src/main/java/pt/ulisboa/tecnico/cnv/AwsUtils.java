@@ -68,12 +68,11 @@ public class AwsUtils {
         GetMetricDataResponse response = cw.getMetricData(getMetReq);
         List<MetricDataResult> data = response.metricDataResults();
 
-        for (MetricDataResult item : data) {
-            System.out.println("The label is " + item.label());
-            System.out.println("The status code is " + item.statusCode().toString());
-        }
+        final var res = data.stream().findFirst();
 
-        return (long) data.get(0).values().get(0).doubleValue();
+        return res.map(metricDataResult ->
+                metricDataResult.values().stream().mapToDouble(Double::doubleValue).average().orElse(0.0)
+        ).orElse(0.0);
     }
 
     public static void deleteInstance(final Ec2Client ec2Client, final String instanceId) {
