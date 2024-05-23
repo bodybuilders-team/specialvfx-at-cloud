@@ -23,7 +23,17 @@ public interface ImageProcessorRequestMetricRepository {
      */
     ImageProcessorRequestMetric getRequestById(String id);
 
+    /**
+     * Get all requests stored in the system.
+     *
+     * @return a list of all requests
+     */
     List<ImageProcessorRequestMetric> getAllRequests();
 
+    /**
+     * Get all distinct requests stored in the system.
+     *
+     * @return a list of all distinct requests
+     */
     List<ImageProcessorRequestMetric> getAllDistinctRequests();
 }

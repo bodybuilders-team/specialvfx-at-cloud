@@ -26,7 +26,7 @@ import java.util.logging.Logger;
 public class WebServer {
 
     private static final int PORT = 8000;
-    private static final Logger LOGGER = Logger.getLogger(RequestAnalyzer.class.getName());
+    private static final Logger LOGGER = Logger.getLogger(WebServer.class.getName());
 
     public static void main(String[] args) throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
@@ -37,25 +37,9 @@ public class WebServer {
         RaytracerRequestMetricRepository raytracerRequestMetricRepository = new RayTracerRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
         ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository = new ImageProcessorRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
 
-        Filter metricsRecorderFilter = Filter.afterHandler(
-                "Obtains the metrics of the request collected by the instrumentation tool and stores them",
-                httpExchange -> {
-                    long threadId = Thread.currentThread().getId();
-                    Request request = RequestAnalyzer.getThreadRequest(threadId);
-
-
-                    if (request != null) {
-                        request.setCompleted(true);
-                        LOGGER.info(String.format("[%s] Request from thread %s: %s%n", RequestAnalyzer.class.getSimpleName(), threadId, request));
-
-                        if (request instanceof RaytracerRequest)
-                            raytracerRequestMetricRepository.save(raytracerRequestToMetric((RaytracerRequest) request));
-                        else if (request instanceof ImageProcessingRequest)
-                            imageProcessorRequestMetricRepository.save(imageProcessorRequestToMetric((ImageProcessingRequest) request));
-                    } else {
-                        LOGGER.severe(String.format("[%s] Request from thread %s was not found%n", RequestAnalyzer.class.getSimpleName(), threadId));
-                    }
-                }
+        Filter metricsRecorderFilter = getMetricsRecorderFilter(
+                raytracerRequestMetricRepository,
+                imageProcessorRequestMetricRepository
         );
 
         server.createContext("/", new RootHandler()).getFilters().add(metricsRecorderFilter);
@@ -68,6 +52,44 @@ public class WebServer {
         System.out.println("Server started on http://localhost:" + PORT + "/");
     }
 
+    /**
+     * Creates a filter that records the metrics of the request collected by the instrumentation tool and stores them.
+     *
+     * @param raytracerRequestMetricRepository      the repository where the raytracer request metrics will be stored
+     * @param imageProcessorRequestMetricRepository the repository where the image processor request metrics will be stored
+     * @return the filter
+     */
+    private static Filter getMetricsRecorderFilter(
+            RaytracerRequestMetricRepository raytracerRequestMetricRepository,
+            ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository
+    ) {
+        return Filter.afterHandler(
+                "Obtains the metrics of the request collected by the instrumentation tool and stores them",
+                httpExchange -> {
+                    long threadId = Thread.currentThread().getId();
+                    Request request = RequestAnalyzer.getThreadRequest(threadId);
+
+                    if (request != null) {
+                        request.setCompleted(true);
+                        LOGGER.info(String.format("[%s] Request from thread %s: %s%n", RequestAnalyzer.class.getSimpleName(), threadId, request));
+
+                        if (request instanceof RaytracerRequest raytracerRequest)
+                            raytracerRequestMetricRepository.save(raytracerRequestToMetric(raytracerRequest));
+                        else if (request instanceof ImageProcessingRequest imageProcessingRequest)
+                            imageProcessorRequestMetricRepository.save(imageProcessorRequestToMetric(imageProcessingRequest));
+                    } else {
+                        LOGGER.severe(String.format("[%s] Request from thread %s was not found%n", RequestAnalyzer.class.getSimpleName(), threadId));
+                    }
+                }
+        );
+    }
+
+    /**
+     * Converts a raytracer request to a raytracer request metric.
+     *
+     * @param request the raytracer request
+     * @return the raytracer request metric
+     */
     private static RaytracerRequestMetric raytracerRequestToMetric(final RaytracerRequest request) {
         final var metric = new RaytracerRequestMetric();
 
@@ -85,6 +107,12 @@ public class WebServer {
         return metric;
     }
 
+    /**
+     * Converts an image processor request to an image processor request metric.
+     *
+     * @param request the image processor request
+     * @return the image processor request metric
+     */
     private static ImageProcessorRequestMetric imageProcessorRequestToMetric(final ImageProcessingRequest request) {
         final var metric = new ImageProcessorRequestMetric();
 

@@ -10,23 +10,20 @@ import java.net.URI;
 
 @Getter
 public class DynamoDbClientManager {
-    private final DynamoDbClient dynamoDbClient;
-    private final DynamoDbEnhancedClient enhancedClient;
-
     public static final String AWS_REGION = "eu-west-3";
     private static final String LOCAL_ENDPOINT = "http://localhost:8010";
     private static final boolean LOCAL = false;
 
+    private final DynamoDbClient dynamoDbClient;
+    private final DynamoDbEnhancedClient enhancedClient;
 
     public DynamoDbClientManager() {
-        // Initialize the DynamoDB client and enhanced client
         final var builder = DynamoDbClient.builder()
                 .region(Region.of(AWS_REGION))
                 .credentialsProvider(EnvironmentVariableCredentialsProvider.create());
 
         if (LOCAL)
             builder.endpointOverride(URI.create(LOCAL_ENDPOINT));
-
 
         dynamoDbClient = builder.build();
 

@@ -1,4 +1,4 @@
-package pt.ulisboa.tecnico.cnv;
+package pt.ulisboa.tecnico.cnv.utils;
 
 import java.io.PrintWriter;
 import java.io.StringWriter;

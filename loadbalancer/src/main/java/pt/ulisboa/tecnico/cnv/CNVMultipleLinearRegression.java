@@ -5,10 +5,9 @@ import org.apache.commons.math3.linear.MatrixUtils;
 import org.apache.commons.math3.linear.RealVector;
 
 public class CNVMultipleLinearRegression {
-    private RealVector w;
-
     final long numIterations;
     final double learningRate;
+    private RealVector w;
 
     public CNVMultipleLinearRegression() {
         super();

@@ -19,7 +19,7 @@ public class EnhanceImageHandler extends ImageProcessingHandler {
         String inputImagePath = args[0];
         String outputImagePath = args[1];
         BufferedImage bufferedInput = UtilImageIO.loadImageNotNull(inputImagePath);
-        ImageProcessingRequest request = new ImageProcessingRequest( bufferedInput);
+        ImageProcessingRequest request = new ImageProcessingRequest(bufferedInput);
         BufferedImage bufferedOutput = new EnhanceImageHandler().process(request);
         UtilImageIO.saveImage(bufferedOutput, outputImagePath);
     }

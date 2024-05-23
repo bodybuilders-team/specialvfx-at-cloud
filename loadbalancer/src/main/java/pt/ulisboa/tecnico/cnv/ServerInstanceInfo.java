@@ -1,6 +1,5 @@
 package pt.ulisboa.tecnico.cnv;
 
-import software.amazon.awssdk.regions.internal.util.EC2MetadataUtils.InstanceInfo;
 import software.amazon.awssdk.services.ec2.model.Instance;
 
 public class ServerInstanceInfo {
@@ -10,11 +9,6 @@ public class ServerInstanceInfo {
 
     public ServerInstanceInfo(final Instance instance) {
         this.instance = instance;
-    }
-
-
-    public void setCpuUsage(double cpuUsage) {
-        this.cpuUsage = cpuUsage;
     }
 
     public void addWork(long work) {
@@ -31,6 +25,10 @@ public class ServerInstanceInfo {
 
     public double getCpuUsage() {
         return this.cpuUsage;
+    }
+
+    public void setCpuUsage(double cpuUsage) {
+        this.cpuUsage = cpuUsage;
     }
 
     public Instance getInstance() {

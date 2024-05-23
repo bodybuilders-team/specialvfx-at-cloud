@@ -79,5 +79,4 @@ public class RayTracerRequestMetricDynamoDbRepositoryImpl implements RaytracerRe
 
         return uniqueRequests.stream().toList();
     }
-
 }

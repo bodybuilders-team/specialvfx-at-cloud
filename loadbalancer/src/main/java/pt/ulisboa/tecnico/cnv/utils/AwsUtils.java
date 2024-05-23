@@ -1,39 +1,65 @@
-package pt.ulisboa.tecnico.cnv;
+package pt.ulisboa.tecnico.cnv.utils;
 
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
-import software.amazon.awssdk.services.cloudwatch.model.*;
+import software.amazon.awssdk.services.cloudwatch.model.Dimension;
+import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataRequest;
+import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataResponse;
+import software.amazon.awssdk.services.cloudwatch.model.Metric;
+import software.amazon.awssdk.services.cloudwatch.model.MetricDataQuery;
+import software.amazon.awssdk.services.cloudwatch.model.MetricDataResult;
+import software.amazon.awssdk.services.cloudwatch.model.MetricStat;
 import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.ec2.model.*;
+import software.amazon.awssdk.services.ec2.model.DescribeInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeInstancesResponse;
+import software.amazon.awssdk.services.ec2.model.Instance;
+import software.amazon.awssdk.services.ec2.model.InstanceStateName;
+import software.amazon.awssdk.services.ec2.model.InstanceType;
+import software.amazon.awssdk.services.ec2.model.RunInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.TerminateInstancesRequest;
 
 import java.time.Instant;
 import java.util.List;
 
 public class AwsUtils {
 
-    private static long OBS_TIME = 60 * 20;
-    private static final String imageId = System.getenv("AWS_IMAGE_ID");
-    private static final String securityGroup = System.getenv("AWS_SECURITY_GROUP");
-    private static final String keyName = System.getenv("AWS_KEYPAIR_NAME");
+    private static final String AWS_IMAGE_ID = System.getenv("AWS_IMAGE_ID");
+    private static final String AWS_SECURITY_GROUP = System.getenv("AWS_SECURITY_GROUP");
+    private static final String AWS_KEYPAIR_NAME = System.getenv("AWS_KEYPAIR_NAME");
+    private static final long OBS_TIME = 60 * 20;
 
+    private AwsUtils() {
+        // hide implicit public constructor
+    }
+
+    /**
+     * Launches an instance with the given parameters
+     *
+     * @param ec2 the ec2 client
+     * @return the instance launched
+     */
     public static Instance launchInstance(Ec2Client ec2) {
         final var runRequest = RunInstancesRequest.builder()
                 .instanceType(InstanceType.T2_MICRO)
-                .imageId(imageId)
-                .securityGroupIds(securityGroup)
-                .keyName(keyName)
+                .imageId(AWS_IMAGE_ID)
+                .securityGroupIds(AWS_SECURITY_GROUP)
+                .keyName(AWS_KEYPAIR_NAME)
                 .maxCount(1)
                 .minCount(1)
                 .build();
 
         final var response = ec2.runInstances(runRequest);
-        final var instance = response.instances().get(0);
-        ec2.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instance.instanceId()));
 
-        return instance;
+        return response.instances().get(0);
     }
 
+    /**
+     * Get the CPU usage of an instance
+     *
+     * @param cw         the cloudwatch client
+     * @param instanceId the instance id
+     * @return the CPU usage
+     */
     public static double getCpuUsage(final CloudWatchClient cw, final String instanceId) {
-
         final Dimension dimension = Dimension.builder()
                 .name("InstanceId")
                 .value(instanceId)
@@ -75,6 +101,12 @@ public class AwsUtils {
         ).orElse(0.0);
     }
 
+    /**
+     * Deletes an instance
+     *
+     * @param ec2Client  the ec2 client
+     * @param instanceId the instance id
+     */
     public static void deleteInstance(final Ec2Client ec2Client, final String instanceId) {
         ec2Client.terminateInstances(r -> r.instanceIds(instanceId));
 
@@ -87,7 +119,12 @@ public class AwsUtils {
         ec2Client.waiter().waitUntilInstanceTerminated(r -> r.instanceIds(instanceId));
     }
 
-
+    /**
+     * Get all instances
+     *
+     * @param ec2Client the ec2 client
+     * @return the list of instances
+     */
     public static List<Instance> getInstances(final Ec2Client ec2Client) {
         DescribeInstancesRequest request = DescribeInstancesRequest.builder().build();
         DescribeInstancesResponse response = ec2Client.describeInstances(request);

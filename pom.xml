@@ -23,7 +23,6 @@
         <module>app</module>
         <module>instrumentation</module>
         <module>loadbalancer</module>
-        <module>autoscaler</module>
     </modules>
 
     <dependencyManagement>

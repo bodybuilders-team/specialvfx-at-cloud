@@ -19,7 +19,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * A thread only processes one request at a time.
  */
 public class RequestAnalyzer extends AbstractJavassistTool {
-    public static final Map<Long, Request> threadRequests = new ConcurrentHashMap<>();
+    protected static final Map<Long, Request> threadRequests = new ConcurrentHashMap<>();
 
     public RequestAnalyzer(List<String> packageNameList, String writeDestination) {
         super(packageNameList, writeDestination);

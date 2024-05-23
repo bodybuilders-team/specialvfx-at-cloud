@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 
 public class RaytracerHandler implements HttpHandler, RequestHandler<Map<String, String>, String> {
 
@@ -65,7 +64,7 @@ public class RaytracerHandler implements HttpHandler, RequestHandler<Map<String,
             }
         }
 
-        RaytracerRequest request = new RaytracerRequest( input, texmap, scols, srows, wcols, wrows, coff, roff);
+        RaytracerRequest request = new RaytracerRequest(input, texmap, scols, srows, wcols, wrows, coff, roff);
         byte[] result = process(request);
         String response = String.format("data:image/bmp;base64,%s", Base64.getEncoder().encodeToString(result));
 

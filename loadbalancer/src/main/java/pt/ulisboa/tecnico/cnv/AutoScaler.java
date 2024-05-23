@@ -1,5 +1,6 @@
 package pt.ulisboa.tecnico.cnv;
 
+import pt.ulisboa.tecnico.cnv.utils.AwsUtils;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
@@ -24,6 +25,7 @@ public class AutoScaler {
     }
 
     public void start() {
+        // Monitor the server load
         new Thread(() -> {
             monitor.lock();
             try {
@@ -40,6 +42,7 @@ public class AutoScaler {
         }).start();
 
         //TODO: Temporary, remove after notifying in the loadbalancer
+        // Notify the monitor to check the server load
         new Thread(() -> {
             try {
                 while (true) {
@@ -71,15 +74,18 @@ public class AutoScaler {
         }
 
         // Check if we need to scale up or down
-        final var averageCpuUsage = instanceInfoMap.values().stream().mapToDouble(ServerInstanceInfo::getCpuUsage).average().orElse(0);
+        final var averageCpuUsage = instanceInfoMap.values().stream()
+                .mapToDouble(ServerInstanceInfo::getCpuUsage)
+                .average()
+                .orElse(0);
 
         System.out.println("averageCpuUsage = " + averageCpuUsage);
         if (averageCpuUsage > 60) {
             final var instance = AwsUtils.launchInstance(ec2Client);
+            ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instance.instanceId()));
             instanceInfoMap.put(instance.instanceId(), new ServerInstanceInfo(instance));
         } else if (averageCpuUsage < 30 && instanceInfoMap.size() > 1) {
-            instanceInfoMap
-                    .values().stream()
+            instanceInfoMap.values().stream()
                     .min(Comparator.comparingDouble(ServerInstanceInfo::getCpuUsage))
                     .ifPresent(instance -> {
                                 //TODO, only delete after every request has been processed
