@@ -9,4 +9,4 @@ source config.sh
 "$SCRIPT_DIR"/function-deregister.sh
 
 # Deregister image
-"$SCRIPT_DIR"/deregsiter-image.sh
+"$SCRIPT_DIR"/deregister-image.sh
