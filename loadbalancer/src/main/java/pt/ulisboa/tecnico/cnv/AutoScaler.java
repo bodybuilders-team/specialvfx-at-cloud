@@ -12,7 +12,7 @@ import java.util.concurrent.locks.ReentrantLock;
 
 public class AutoScaler {
 
-    private final Map<String, ServerInstanceInfo> instanceInfoMap;
+    private final Map<String, VMWorkerInfo> instanceInfoMap;
     private final ReentrantLock monitor = new ReentrantLock();
     private final Condition condition = monitor.newCondition();
     private final Region region = Region.EU_WEST_3;
@@ -20,7 +20,7 @@ public class AutoScaler {
     private final Ec2Client ec2Client = Ec2Client.builder().region(region).build();
 
 
-    public AutoScaler(final Map<String, ServerInstanceInfo> instanceInfoMap) {
+    public AutoScaler(final Map<String, VMWorkerInfo> instanceInfoMap) {
         this.instanceInfoMap = instanceInfoMap;
     }
 
@@ -75,7 +75,7 @@ public class AutoScaler {
 
         // Check if we need to scale up or down
         final var averageCpuUsage = instanceInfoMap.values().stream()
-                .mapToDouble(ServerInstanceInfo::getCpuUsage)
+                .mapToDouble(VMWorkerInfo::getCpuUsage)
                 .average()
                 .orElse(0);
 
@@ -83,10 +83,10 @@ public class AutoScaler {
         if (averageCpuUsage > 60) {
             final var instance = AwsUtils.launchInstance(ec2Client);
             ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instance.instanceId()));
-            instanceInfoMap.put(instance.instanceId(), new ServerInstanceInfo(instance));
+            instanceInfoMap.put(instance.instanceId(), new VMWorkerInfo(instance));
         } else if (averageCpuUsage < 30 && instanceInfoMap.size() > 1) {
             instanceInfoMap.values().stream()
-                    .min(Comparator.comparingDouble(ServerInstanceInfo::getCpuUsage))
+                    .min(Comparator.comparingDouble(VMWorkerInfo::getCpuUsage))
                     .ifPresent(instance -> {
                                 //TODO, only delete after every request has been processed
                                 instanceInfoMap.remove(instance.getInstance().instanceId());

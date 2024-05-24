@@ -84,7 +84,11 @@ To deploy the application to AWS, you can use the provided scripts in the `scrip
 the AWS CLI to be installed and configured with the necessary permissions.
 
 1. Configure the `scripts/aws/config.sh` file with the necessary parameters;
-2. Run `./scripts/aws/create-image.sh` to create an AMI with the application;
-3. Run `./scripts/aws/launch-deployment.sh` to deploy the application to AWS.
+2. If it's the first time deploying the system, run `./scripts/aws/create-and-launch-system.sh` to create the necessary
+   resources in AWS, including the lambda functions, the worker image and the instance running the load balancer and
+   autoscaler;
+3. If the system is already created, run `./scripts/aws/launch-lb.sh` to deploy the load balancer and autoscaler,
+   because the image and lambda functions are already created;
 
-To remove the deployment, you can run `./scripts/aws/terminate-deployment.sh`.
+To terminate the system, run `./scripts/aws/terminate-system.sh` - this only terminates the instances and the load
+balancer. To terminate and delete all resources, run `./scripts/aws/terminate-and-delete-system.sh`.

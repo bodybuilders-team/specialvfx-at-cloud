@@ -18,53 +18,60 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
-public class LoadBalancerWebServer {
+/**
+ * Entry point for the webserver that will act as a load balancer and auto scaler.
+ */
+public class LoadAndScaleWebServer {
     public static final String AWS_REGION = "eu-west-3";
     private static final int PORT = 8001;
-    private static final Logger logger = Logger.getLogger(LoadBalancerWebServer.class.getName());
+    private static final Logger logger = Logger.getLogger(LoadAndScaleWebServer.class.getName());
 
     public static void main(String[] args) throws IOException {
         if (args.length != 2) {
-            System.out.println("Usage: LoadBalancerWebServer <imageProcessorArn> <raytracerArn>");
+            System.out.println("Usage: LoadAndScaleManager <imageProcessorArn> <raytracerArn>");
             System.exit(1);
         }
 
         final HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
 
-        DynamoDbClientManager dynamoDbClientManager = new DynamoDbClientManager();
-        RaytracerRequestMetricRepository raytracerRequestMetricRepository = new RayTracerRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
-        ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository = new ImageProcessorRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
+        final DynamoDbClientManager dynamoDbClientManager = new DynamoDbClientManager();
+        final RaytracerRequestMetricRepository raytracerRequestMetricRepository = new RayTracerRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
+        final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository = new ImageProcessorRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
 
-        LambdaClient lambdaClient = LambdaClient.builder()
+        final LambdaClient lambdaClient = LambdaClient.builder()
+                .region(Region.of(AWS_REGION))
                 .credentialsProvider(EnvironmentVariableCredentialsProvider.create())
                 .build();
 
         final Ec2Client ec2Client = Ec2Client.builder()
                 .region(Region.of(AWS_REGION))
-                .credentialsProvider(EnvironmentVariableCredentialsProvider.create()).build();
+                .credentialsProvider(EnvironmentVariableCredentialsProvider.create())
+                .build();
 
-        final Map<String, ServerInstanceInfo> instanceInfoMap = new ConcurrentHashMap<>();
+        // Get all instances of the VM workers
+        final Map<String, VMWorkerInfo> vmWorkersInfo = new ConcurrentHashMap<>();
         final var instances = AwsUtils.getInstances(ec2Client);
 
         logger.info("Found " + instances.size() + " instances");
         for (var instance : instances) {
-            instanceInfoMap.put(instance.instanceId(), new ServerInstanceInfo(instance));
+            vmWorkersInfo.put(instance.instanceId(), new VMWorkerInfo(instance));
             logger.info("Instance " + instance.instanceId() + " added");
         }
 
-        if (instanceInfoMap.isEmpty()) {
+        if (vmWorkersInfo.isEmpty()) {
             logger.info("No instances found, launching a new one");
             final var instance = AwsUtils.launchInstance(ec2Client);
             ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instance.instanceId()));
-            instanceInfoMap.put(instance.instanceId(), new ServerInstanceInfo(instance));
+            vmWorkersInfo.put(instance.instanceId(), new VMWorkerInfo(instance));
         }
 
-        AutoScaler autoScaler = new AutoScaler(instanceInfoMap);
-
+        // Start the auto scaler
+        AutoScaler autoScaler = new AutoScaler(vmWorkersInfo);
         autoScaler.start();
 
-        server.createContext("/", new LoadBalancerHandler(instanceInfoMap,
+        server.createContext("/", new LoadBalancerHandler(
+                vmWorkersInfo,
                 raytracerRequestMetricRepository,
                 imageProcessorRequestMetricRepository,
                 ec2Client,

@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.http.NameValuePair;
+import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URLEncodedUtils;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetric;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricRepository;
@@ -11,11 +12,10 @@ import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetric;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetricRepository;
 import pt.ulisboa.tecnico.cnv.utils.AwsUtils;
 import pt.ulisboa.tecnico.cnv.utils.ExceptionUtils;
-import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.http.HttpStatusCode;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.lambda.LambdaClient;
-import software.amazon.awssdk.services.lambda.model.InvokeResponse;
 
 import javax.imageio.ImageIO;
 import java.awt.image.BufferedImage;
@@ -37,19 +37,26 @@ public class LoadBalancerHandler implements HttpHandler {
     private static final double EPSILON = 1e-6;
     private static final int PORT = 8000;
     private static final long DEFAULT_COMPLEXITY_RAYTRACER = 500000000;
-    private static final long DEFAULT_COMPLEXITY_IMAGE_PROCESSOR = 91;
+    private static final long DEFAULT_COMPLEXITY_IMAGE_PROCESSOR = 430000000;
+    public static final long COMPLEX_REQUEST_THRESHOLD = DEFAULT_COMPLEXITY_RAYTRACER * 2;
+    public static final int OVERLOAD_THRESHOLD = 80;
+    public static final String RAYTRACER_PATH = "/raytracer";
+    public static final String BLURIMAGE_PATH = "/blurimage";
 
-    private final Map<String, ServerInstanceInfo> instanceInfoMap;
-    private final RaytracerRequestMetricRepository raytracerRequestMetricRepository;
+    private final Map<String, VMWorkerInfo> vmWorkersInfo;
     private final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository;
+    private final RaytracerRequestMetricRepository raytracerRequestMetricRepository;
+
     private final Ec2Client ec2Client;
     private final LambdaClient lambdaClient;
+
     private final Logger logger = Logger.getLogger(LoadBalancerHandler.class.getName());
+
     private final String imageProcessorArn;
     private final String raytracerArn;
 
     public LoadBalancerHandler(
-            final Map<String, ServerInstanceInfo> instanceInfoMap,
+            final Map<String, VMWorkerInfo> vmWorkersInfo,
             RaytracerRequestMetricRepository raytracerRequestMetricRepository,
             final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository,
             final Ec2Client ec2Client,
@@ -57,7 +64,7 @@ public class LoadBalancerHandler implements HttpHandler {
             final String imageProcessorArn,
             final String raytracerArn
     ) {
-        this.instanceInfoMap = instanceInfoMap;
+        this.vmWorkersInfo = vmWorkersInfo;
         this.raytracerRequestMetricRepository = raytracerRequestMetricRepository;
         this.imageProcessorRequestMetricRepository = imageProcessorRequestMetricRepository;
         this.ec2Client = ec2Client;
@@ -69,8 +76,8 @@ public class LoadBalancerHandler implements HttpHandler {
     @Override
     public void handle(final HttpExchange exchange) throws IOException {
         try {
-            if (!exchange.getRequestMethod().equals("POST")) {
-                exchange.sendResponseHeaders(405, -1);
+            if (!exchange.getRequestMethod().equals(HttpPost.METHOD_NAME)) {
+                exchange.sendResponseHeaders(HttpStatusCode.METHOD_NOT_ALLOWED, -1);
                 return;
             }
 
@@ -82,26 +89,26 @@ public class LoadBalancerHandler implements HttpHandler {
             logger.info("Received request for " + requestURI + " with complexity " + requestComplexity);
 
             // Check if the vms are overloaded
-            final var averageCpuUsage = instanceInfoMap.values().stream()
-                    .mapToDouble(ServerInstanceInfo::getCpuUsage)
+            final var averageCpuUsage = vmWorkersInfo.values().stream()
+                    .mapToDouble(VMWorkerInfo::getCpuUsage)
                     .average()
                     .orElse(0);
 
-            if (averageCpuUsage > 80) {
+            if (averageCpuUsage > OVERLOAD_THRESHOLD) {
                 logger.info("Average CPU usage is " + averageCpuUsage + ", launching a new instance");
-                final var instance = AwsUtils.launchInstance(ec2Client);
-                instanceInfoMap.put(instance.instanceId(), new ServerInstanceInfo(instance));
+                final var newVmWorker = AwsUtils.launchInstance(ec2Client);
+                vmWorkersInfo.put(newVmWorker.instanceId(), new VMWorkerInfo(newVmWorker));
 
-                if (requestComplexity > 100) { // TODO: Use a better threshold
+                if (requestComplexity > COMPLEX_REQUEST_THRESHOLD) {
                     logger.info("Request is complex, sending to new instance");
-                    ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instance.instanceId())); // TODO: Use a better way to wait
-                    redirectToVM(exchange, instanceInfoMap.get(instance.instanceId()), requestURI, requestComplexity, requestBody);
+                    ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(newVmWorker.instanceId())); // TODO: Use a better way to wait
+                    redirectToVMWorker(exchange, vmWorkersInfo.get(newVmWorker.instanceId()), requestURI, requestComplexity, requestBody);
                 } else {
                     logger.info("Request is simple, sending to lambda");
 
                     SdkBytes payload = SdkBytes.fromByteArray(requestBody);
                     final var response = lambdaClient.invoke(req -> req
-                            .functionName(requestURI.getPath().equals("/raytracer") ? raytracerArn : imageProcessorArn)
+                            .functionName(requestURI.getPath().equals(RAYTRACER_PATH) ? raytracerArn : imageProcessorArn)
                             .payload(payload)
                     );
                     // TODO: Stream the response
@@ -112,11 +119,11 @@ public class LoadBalancerHandler implements HttpHandler {
             }
 
             // Send the request to the instance with the least CPU usage
-            final var instanceWithLeastCpuUsage = instanceInfoMap.values().stream()
-                    .min(Comparator.comparingDouble(ServerInstanceInfo::getCpuUsage))// TODO: Use instance work and implement work left
+            final var instanceWithLeastCpuUsage = vmWorkersInfo.values().stream()
+                    .min(Comparator.comparingDouble(VMWorkerInfo::getCpuUsage))// TODO: Use instance work and implement work left
                     .orElseThrow();
 
-            redirectToVM(exchange, instanceWithLeastCpuUsage, requestURI, requestComplexity, requestBody);
+            redirectToVMWorker(exchange, instanceWithLeastCpuUsage, requestURI, requestComplexity, requestBody);
 
         } catch (Exception e) {
             logger.severe(ExceptionUtils.getStackTrace(e));
@@ -130,9 +137,9 @@ public class LoadBalancerHandler implements HttpHandler {
      * Redirect the request to the instance that will process it.
      * It will increment the work of the instance and decrement it after the request is processed.
      */
-    private void redirectToVM(
+    private void redirectToVMWorker(
             HttpExchange exchange,
-            ServerInstanceInfo instance,
+            VMWorkerInfo instance,
             URI requestURI,
             long requestComplexity,
             byte[] requestBody
@@ -154,7 +161,7 @@ public class LoadBalancerHandler implements HttpHandler {
      */
     private long estimateComplexity(final URI requestURI, final byte[] requestBody) throws IOException {
         switch (requestURI.getPath()) {
-            case "/blurimage": {
+            case BLURIMAGE_PATH: {
                 final var image = readImage(requestBody);
                 final var numPixels = image.getWidth() * image.getHeight();
 
@@ -177,7 +184,7 @@ public class LoadBalancerHandler implements HttpHandler {
 
                 return (long) regression.predict(normalizedInput);
             }
-            case "/raytracer": {
+            case RAYTRACER_PATH: {
                 final Map<String, String> parameters = URLEncodedUtils.parse(requestURI, Charset.defaultCharset())
                         .stream()
                         .collect(Collectors.toMap(NameValuePair::getName, NameValuePair::getValue));

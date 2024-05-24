@@ -96,8 +96,10 @@ public class AwsUtils {
 
         final var res = data.stream().findFirst();
 
-        return res.map(metricDataResult ->
-                metricDataResult.values().stream().mapToDouble(Double::doubleValue).average().orElse(0.0)
+        return res.map(metricDataResult -> metricDataResult.values().stream()
+                .mapToDouble(Double::doubleValue)
+                .average()
+                .orElse(0.0)
         ).orElse(0.0);
     }
 
@@ -125,7 +127,7 @@ public class AwsUtils {
      * @param ec2Client the ec2 client
      * @return the list of instances
      */
-    public static List<Instance> getInstances(final Ec2Client ec2Client) {
+    public static List<Instance> getInstances(final Ec2Client ec2Client) { // TODO get only our instances
         DescribeInstancesRequest request = DescribeInstancesRequest.builder().build();
         DescribeInstancesResponse response = ec2Client.describeInstances(request);
 
