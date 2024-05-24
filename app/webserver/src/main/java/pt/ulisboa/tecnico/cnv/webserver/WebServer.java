@@ -66,6 +66,9 @@ public class WebServer {
         return Filter.afterHandler(
                 "Obtains the metrics of the request collected by the instrumentation tool and stores them",
                 httpExchange -> {
+                    if (!httpExchange.getRequestMethod().equals("POST")) {
+                        return;
+                    }
                     long threadId = Thread.currentThread().getId();
                     Request request = RequestAnalyzer.getThreadRequest(threadId);
 
