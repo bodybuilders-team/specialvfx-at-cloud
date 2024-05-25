@@ -12,7 +12,7 @@ source config.sh
 "$SCRIPT_DIR"/test-vm.sh
 
 # Step 4: create VM image (AIM).
-aws ec2 create-image --instance-id $(cat instance.id) --name CNV-Image | jq -r .ImageId > image.id
+aws ec2 create-image --instance-id $(cat instance.id) --name CNV-Image  | jq -r .ImageId > image.id
 echo "New VM image with id $(cat image.id)."
 
 # Step 5: Wait for image to become available.

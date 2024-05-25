@@ -9,6 +9,7 @@ import java.util.Comparator;
 import java.util.Map;
 import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Logger;
 
 public class AutoScaler {
 
@@ -18,6 +19,7 @@ public class AutoScaler {
     private final Region region = Region.EU_WEST_3;
     private final CloudWatchClient cloudWatchClient = CloudWatchClient.builder().region(region).build();
     private final Ec2Client ec2Client = Ec2Client.builder().region(region).build();
+    private final Logger logger = Logger.getLogger(AutoScaler.class.getName());
 
 
     public AutoScaler(final Map<String, VMWorkerInfo> instanceInfoMap) {
@@ -46,7 +48,7 @@ public class AutoScaler {
         new Thread(() -> {
             try {
                 while (true) {
-                    Thread.sleep(1000);
+                    Thread.sleep(4000);
 
                     monitor.lock();
                     condition.signalAll();
@@ -65,27 +67,41 @@ public class AutoScaler {
     private void monitor() throws InterruptedException {
         condition.await();
 
-        // Monitor the server load from cloudwatch
+        // Check if the instances are initialized
         for (var instance : instanceInfoMap.values()) {
-            final var instanceId = instance.getInstance().instanceId();
+            if (!instance.isInitialized()) {
+                // Get the instance data
+                final var instanceId = instance.getInstance().instanceId();
+                final var newInstance = AwsUtils.getInstance(ec2Client, instanceId);
 
-            final var cpuUsage = AwsUtils.getCpuUsage(cloudWatchClient, instanceId);
-            instance.setCpuUsage(cpuUsage);
+                instance.setInstance(newInstance);
+                instance.setInitialized(true);
+            }
         }
+
+
+        AwsUtils.getCpuUsage(cloudWatchClient, instanceInfoMap.keySet().stream().toList())
+                .forEach((instanceId, cpuUsage) -> instanceInfoMap.get(instanceId).setCpuUsage(cpuUsage));
 
         // Check if we need to scale up or down
         final var averageCpuUsage = instanceInfoMap.values().stream()
+                .filter(VMWorkerInfo::isInitialized)
                 .mapToDouble(VMWorkerInfo::getCpuUsage)
                 .average()
                 .orElse(0);
 
-        System.out.println("averageCpuUsage = " + averageCpuUsage);
+
+        logger.info("Instance count: " + instanceInfoMap.size());
+        logger.info("Instance count initialized: " + instanceInfoMap.values().stream().filter(VMWorkerInfo::isInitialized).count());
+        logger.info("Average CPU usage: " + averageCpuUsage);
+
         if (averageCpuUsage > 60) {
-            final var instance = AwsUtils.launchInstance(ec2Client);
-            ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instance.instanceId()));
-            instanceInfoMap.put(instance.instanceId(), new VMWorkerInfo(instance));
+//            final var instance = AwsUtils.launchInstance(ec2Client);
+//            ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instance.instanceId()));
+//            instanceInfoMap.put(instance.instanceId(), new VMWorkerInfo(instance));
         } else if (averageCpuUsage < 30 && instanceInfoMap.size() > 1) {
             instanceInfoMap.values().stream()
+                    .filter(VMWorkerInfo::isInitialized)
                     .min(Comparator.comparingDouble(VMWorkerInfo::getCpuUsage))
                     .ifPresent(instance -> {
                                 //TODO, only delete after every request has been processed

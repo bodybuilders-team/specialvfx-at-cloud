@@ -39,6 +39,6 @@ scp -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAIR_PATH "$SCRIPT_DIR/config
 
 # Setup web server to start on instance launch.
 run_cmd="source /home/ec2-user/config.sh && export AWS_IMAGE_ID=$(cat image.id) && nohup java -cp /home/ec2-user/$webserver_jar pt.ulisboa.tecnico.cnv.LoadAndScaleWebServer $(cat imageproc-lambda-arn) $(cat raytracer-lambda-arn) > /home/ec2-user/webserver.log 2>&1 &"
-ssh -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAIR_PATH ec2-user@$(cat lb-instance.dns) $run_cmd
+ssh -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAIR_PATH ec2-user@$(cat lb-instance.dns) "$run_cmd"
 
 echo "Load balancer instance with id $(cat lb-instance.id) is now ready."

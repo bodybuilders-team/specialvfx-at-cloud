@@ -87,7 +87,7 @@ the AWS CLI to be installed and configured with the necessary permissions.
 2. If it's the first time deploying the system, run `./scripts/aws/create-and-launch-system.sh` to create the necessary
    resources in AWS, including the lambda functions, the worker image and the instance running the load balancer and
    autoscaler;
-3. If the system is already created, run `./scripts/aws/launch-lb.sh` to deploy the load balancer and autoscaler,
+3. If the system is already created, run `./scripts/aws/launch-system.sh` to deploy the load balancer and autoscaler,
    because the image and lambda functions are already created;
 
 To terminate the system, run `./scripts/aws/terminate-system.sh` - this only terminates the instances and the load

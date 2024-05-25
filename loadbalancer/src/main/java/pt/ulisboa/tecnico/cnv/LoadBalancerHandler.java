@@ -1,5 +1,6 @@
 package pt.ulisboa.tecnico.cnv;
 
+import com.google.gson.Gson;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
@@ -27,7 +28,7 @@ import java.net.URISyntaxException;
 import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Base64;
-import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
@@ -50,7 +51,7 @@ public class LoadBalancerHandler implements HttpHandler {
     private final Ec2Client ec2Client;
     private final LambdaClient lambdaClient;
 
-    private final Logger logger = Logger.getLogger(LoadBalancerHandler.class.getName());
+    private static final Logger logger = Logger.getLogger(LoadBalancerHandler.class.getName());
 
     private final String imageProcessorArn;
     private final String raytracerArn;
@@ -75,7 +76,18 @@ public class LoadBalancerHandler implements HttpHandler {
 
     @Override
     public void handle(final HttpExchange exchange) throws IOException {
+        exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+
+        if (exchange.getRequestMethod().equalsIgnoreCase("OPTIONS")) {
+            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, OPTIONS");
+            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type,Authorization");
+            exchange.sendResponseHeaders(204, -1);
+            return;
+        }
+
         try {
+
+            logger.info("Received request for " + exchange.getRequestURI());
             if (!exchange.getRequestMethod().equals(HttpPost.METHOD_NAME)) {
                 exchange.sendResponseHeaders(HttpStatusCode.METHOD_NOT_ALLOWED, -1);
                 return;
@@ -94,43 +106,101 @@ public class LoadBalancerHandler implements HttpHandler {
                     .average()
                     .orElse(0);
 
-            if (averageCpuUsage > OVERLOAD_THRESHOLD) {
-                logger.info("Average CPU usage is " + averageCpuUsage + ", launching a new instance");
-                final var newVmWorker = AwsUtils.launchInstance(ec2Client);
-                vmWorkersInfo.put(newVmWorker.instanceId(), new VMWorkerInfo(newVmWorker));
 
-                if (requestComplexity > COMPLEX_REQUEST_THRESHOLD) {
-                    logger.info("Request is complex, sending to new instance");
-                    ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(newVmWorker.instanceId())); // TODO: Use a better way to wait
-                    redirectToVMWorker(exchange, vmWorkersInfo.get(newVmWorker.instanceId()), requestURI, requestComplexity, requestBody);
-                } else {
-                    logger.info("Request is simple, sending to lambda");
+            //TODO: Add fault tolerance when for example we redirect to a terminating instance or smthg like that.
 
-                    SdkBytes payload = SdkBytes.fromByteArray(requestBody);
-                    final var response = lambdaClient.invoke(req -> req
-                            .functionName(requestURI.getPath().equals(RAYTRACER_PATH) ? raytracerArn : imageProcessorArn)
-                            .payload(payload)
-                    );
-                    // TODO: Stream the response
-                    exchange.sendResponseHeaders(response.statusCode(), response.payload().asByteArray().length);
-                    exchange.getResponseBody().write(response.payload().asByteArray());
-                }
-                return;
+//            if (averageCpuUsage > OVERLOAD_THRESHOLD) {
+//                logger.info("Average CPU usage is " + averageCpuUsage + ", launching a new instance");
+//
+//                // If any instance is initializing, wait for it to be initialized
+//                final var initializingInstanceOpt = vmWorkersInfo.values().stream()
+//                        .filter(vmWorkerInfo -> !vmWorkerInfo.isInitialized())
+//                        .findAny();
+//
+//                if (initializingInstanceOpt.isPresent()) {
+//                    var initializingInstance = initializingInstanceOpt.get();
+//                    logger.info("Waiting for instance to be initialized");
+//                    final var instance = AwsUtils.waitForInstance(ec2Client, initializingInstance.getInstance().instanceId());
+//
+//                    initializingInstance.setInstance(instance);
+//                    initializingInstance.setInitialized(true);
+//
+//                    redirectToVMWorker(exchange, initializingInstance, requestURI, requestComplexity, requestBody);
+//                    return;
+//                }
+//
+//                if (requestComplexity > COMPLEX_REQUEST_THRESHOLD) {
+//                    logger.info("Request is complex, sending to new instance");
+//
+//                    final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
+//                    final var vmWorker = new VMWorkerInfo(instance);
+//                    vmWorker.setInitialized(true);
+//
+//                    vmWorkersInfo.put(instance.instanceId(), vmWorker);
+//
+//                    redirectToVMWorker(exchange, vmWorker, requestURI, requestComplexity, requestBody);
+//                } else {
+            final var newVmWorker = AwsUtils.launchInstance(ec2Client);
+            final var vmWorker = new VMWorkerInfo(newVmWorker);
+
+            vmWorkersInfo.put(newVmWorker.instanceId(), vmWorker);
+
+            logger.info("Request is simple, sending to lambda");
+
+
+            var payload = encodeImage(requestBody);
+
+            final var response = lambdaClient.invoke(req -> req
+                    .functionName(requestURI.getPath().equals(RAYTRACER_PATH) ? raytracerArn : imageProcessorArn)
+                    .payload(payload)
+            );
+
+            // TODO: Stream the response
+            final var responseBody = response.payload().asByteArray();
+
+//            final var result2 = new String(responseBody).lines().collect(Collectors.joining("\n"));
+//            final var resultSplits2 = result.split(",");
+//            final var format = resultSplits[0].split("/")[1].split(";")[0];
+//
+//            String output = handleRequest(resultSplits[1], format);
+//            output = String.format("data:image/%s;base64,%s", format, output);
+//            exchange.sendResponseHeaders(response.statusCode(), responseBody.length);
+
+            try (var os = exchange.getResponseBody()) {
+                os.write(responseBody);
             }
 
+
+//                }
+            return;
+//            }
+
             // Send the request to the instance with the least CPU usage
-            final var instanceWithLeastCpuUsage = vmWorkersInfo.values().stream()
-                    .min(Comparator.comparingDouble(VMWorkerInfo::getCpuUsage))// TODO: Use instance work and implement work left
-                    .orElseThrow();
-
-            redirectToVMWorker(exchange, instanceWithLeastCpuUsage, requestURI, requestComplexity, requestBody);
-
+//            final var instanceWithLeastCpuUsage = vmWorkersInfo.values().stream()
+//                    .filter(VMWorkerInfo::isInitialized)
+//                    .min(Comparator.comparingDouble(VMWorkerInfo::getCpuUsage))// TODO: Use instance work and implement work left
+//                    .orElseThrow(); // TODO: Or else, wait for an instance to be available
+//
+//            redirectToVMWorker(exchange, instanceWithLeastCpuUsage, requestURI, requestComplexity, requestBody);
+//
         } catch (Exception e) {
             logger.severe(ExceptionUtils.getStackTrace(e));
             exchange.sendResponseHeaders(HttpURLConnection.HTTP_INTERNAL_ERROR, -1);
         } finally {
             exchange.close();
         }
+    }
+
+    private static SdkBytes encodeImage(final byte[] requestBody) {
+        Map<String, String> requestPayload = new HashMap<>();
+        String result = new String(requestBody).lines().collect(Collectors.joining("\n"));
+        String[] resultSplits = result.split(",");
+
+        requestPayload.put("fileFormat", resultSplits[0]);
+        requestPayload.put("body", resultSplits[1]);
+
+
+        return SdkBytes.fromUtf8String(new Gson().toJson(requestPayload));
     }
 
     /**
@@ -145,6 +215,8 @@ public class LoadBalancerHandler implements HttpHandler {
             byte[] requestBody
     ) throws URISyntaxException, IOException {
         final var instanceUri = new URI("http://" + instance.getInstance().publicDnsName() + ":" + PORT + requestURI);
+
+        logger.info("Redirecting to " + instanceUri);
 
         instance.addWork(requestComplexity);
         redirect(exchange, requestBody, instanceUri);

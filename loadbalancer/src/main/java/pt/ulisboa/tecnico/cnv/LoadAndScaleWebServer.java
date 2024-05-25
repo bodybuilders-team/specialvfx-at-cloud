@@ -55,15 +55,19 @@ public class LoadAndScaleWebServer {
 
         logger.info("Found " + instances.size() + " instances");
         for (var instance : instances) {
-            vmWorkersInfo.put(instance.instanceId(), new VMWorkerInfo(instance));
+            final var vmWorker = new VMWorkerInfo(instance);
+            vmWorker.setInitialized(true);
+            vmWorkersInfo.put(instance.instanceId(), vmWorker);
             logger.info("Instance " + instance.instanceId() + " added");
         }
 
         if (vmWorkersInfo.isEmpty()) {
             logger.info("No instances found, launching a new one");
-            final var instance = AwsUtils.launchInstance(ec2Client);
-            ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instance.instanceId()));
-            vmWorkersInfo.put(instance.instanceId(), new VMWorkerInfo(instance));
+            final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
+            final var vmWorker = new VMWorkerInfo(instance);
+            vmWorker.setInitialized(true);
+
+            vmWorkersInfo.put(instance.instanceId(), vmWorker);
         }
 
         // Start the auto scaler
@@ -82,4 +86,6 @@ public class LoadAndScaleWebServer {
         server.start();
         logger.info("Server started on http://localhost:" + PORT + "/");
     }
+
+
 }

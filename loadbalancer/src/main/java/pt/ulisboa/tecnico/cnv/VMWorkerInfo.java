@@ -8,19 +8,36 @@ import software.amazon.awssdk.services.ec2.model.Instance;
  */
 @Data
 public class VMWorkerInfo {
-    private final Instance instance;
+    private Instance instance;
     private double cpuUsage = 0;
     private long work = 0;
+    private boolean initialized = false;
 
     public VMWorkerInfo(final Instance instance) {
         this.instance = instance;
     }
 
-    public void addWork(long work) {
+    public synchronized void addWork(long work) {
         this.work += work;
     }
 
-    public void removeWork(long work) {
+    public synchronized void removeWork(long work) {
         this.work -= work;
+    }
+
+    public synchronized void setInitialized(final boolean initialized) {
+        this.initialized = initialized;
+    }
+
+    public boolean isInitialized() {
+        return initialized;
+    }
+
+    public Instance getInstance() {
+        return instance;
+    }
+
+    public synchronized void setInstance(final Instance instance) {
+        this.instance = instance;
     }
 }

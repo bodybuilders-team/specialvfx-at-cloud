@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-source $SCRIPT_DIR/config.sh
+source "$SCRIPT_DIR"/config.sh
 
 echo "Creating role for lambda functions..."
 aws iam create-role \
