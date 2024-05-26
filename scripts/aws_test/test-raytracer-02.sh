@@ -16,21 +16,28 @@ resources_dir=$(realpath "$script_dir/../../app/raytracer/resources/")
 url=$1
 
 function simple {
+  start=$(date +%s.%N)
 	echo "started raytracer simple"
 	# Add scene.txt raw content to JSON.
 	cat "$resources_dir/test01.txt" | jq -sR '{scene: .}' > payload_simple.json
 	# Send the request.
 	curl -s -X POST "http://$url/raytracer?scols=400&srows=300&wcols=400&wrows=300&coff=0&roff=0&aa=false" --data @"./payload_simple.json" > result_simple.txt
+
 	# Remove a formatting string (remove everything before the comma).
 	sed -i 's/^[^,]*,//' result_simple.txt                                                                                             
 	base64 -d result_simple.txt > result_simple.bmp
 	echo "finished raytracer simple"
+
+  end=$(date +%s.%N)
+  duration=$(echo "$end - $start" | bc)
+  echo "Execution time: $duration seconds"
 }
 
 function complex {
+  start=$(date +%s.%N)
 	echo "started raytrace complex"
 	# Add scene.txt raw content to JSON.
-	cat "$resources_dir/test-textmap.txt" | jq -sR '{scene: .}' > payload_complex.json
+	cat "$resources_dir/test-texmap.txt" | jq -sR '{scene: .}' > payload_complex.json
 	# Add texmap.bmp binary to JSON (optional step, required only for some scenes).
 	hexdump -ve '1/1 "%u\n"' "$resources_dir/test-texmap.bmp" | jq -s --argjson original "$(<payload_complex.json)" '$original * {texmap: .}' > payload_complex.json
 	# Send the request.
@@ -39,10 +46,12 @@ function complex {
 	sed -i 's/^[^,]*,//' result_complex.txt                                                                                             
 	base64 -d result_complex.txt > result_complex.bmp
 	echo "finished raytracer complex"
+  end=$(date +%s.%N)
+  duration=$(echo "$end - $start" | bc)
+  echo "Execution time: $duration seconds"
 }
 
 # Run 100 requests concurrently and repeat 500 times
 for ((i = 0; i < 50000; i++)); do
-      simple &
-      sleep 1
+    complex
 done

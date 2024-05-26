@@ -14,8 +14,6 @@ import software.amazon.awssdk.services.lambda.LambdaClient;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 /**
@@ -45,30 +43,30 @@ public class LoadAndScaleWebServer {
                 .build();
 
 //        // Get all instances of the VM workers
-        final Map<String, VMWorkerInfo> vmWorkersInfo = new ConcurrentHashMap<>();
-        final var instances = AwsUtils.getInstances(ec2Client);
+        RequestsMonitor requestsMonitor = new RequestsMonitor();
+        final var instancesData = AwsUtils.getInstances(ec2Client);
 
-        logger.info("Found " + instances.size() + " instances");
-        for (var instance : instances) {
-            final var vmWorker = new VMWorkerInfo(instance);
-            vmWorkersInfo.put(instance.instanceId(), vmWorker);
+        logger.info("Found " + instancesData.size() + " instances");
+        for (var instance : instancesData) {
+            final var vmWorker = new VMInstance(instance);
+            requestsMonitor.getInstances().put(instance.instanceId(), vmWorker);
             logger.info("Instance " + instance.instanceId() + " added");
         }
 
-        if (vmWorkersInfo.isEmpty()) {
+        if (requestsMonitor.getInstances().isEmpty()) {
             logger.info("No instances found, launching a new one");
             final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
-            final var vmWorker = new VMWorkerInfo(instance);
+            final var vmWorker = new VMInstance(instance);
 
-            vmWorkersInfo.put(instance.instanceId(), vmWorker);
+            requestsMonitor.getInstances().put(instance.instanceId(), vmWorker);
         }
 
         // Start the auto scaler
-        AutoScaler autoScaler = new AutoScaler(vmWorkersInfo);
+        AutoScaler autoScaler = new AutoScaler(requestsMonitor);
         autoScaler.start();
 
         server.createContext("/", new LoadBalancerHandler(
-                vmWorkersInfo,
+                requestsMonitor,
                 raytracerRequestMetricRepository,
                 imageProcessorRequestMetricRepository,
                 ec2Client,

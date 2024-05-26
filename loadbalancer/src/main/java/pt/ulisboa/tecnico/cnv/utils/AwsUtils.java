@@ -123,8 +123,6 @@ public class AwsUtils {
                 .build();
 
         ec2Client.terminateInstances(terminateRequest);
-
-        ec2Client.waiter().waitUntilInstanceTerminated(r -> r.instanceIds(instanceId));
     }
 
     /**

@@ -26,3 +26,8 @@ while ! nc -z $(cat instance.dns) 22; do
 	sleep 0.5
 done
 echo "New instance with id $(cat instance.id) is ready for SSH access."
+
+while [ "$(curl -s $(cat instance.dns)/test)" != "OK" ]; do
+  echo "Waiting for $(cat instance.dns) to respond to /test..."
+  sleep 0.5
+done
