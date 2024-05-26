@@ -43,30 +43,30 @@ public class LoadAndScaleWebServer {
                 .build();
 
 //        // Get all instances of the VM workers
-        RequestsMonitor requestsMonitor = new RequestsMonitor();
+        VMWorkersMonitor VMWorkersMonitor = new VMWorkersMonitor();
         final var instancesData = AwsUtils.getInstances(ec2Client);
 
         logger.info("Found " + instancesData.size() + " instances");
         for (var instance : instancesData) {
             final var vmWorker = new VMWorker(instance);
-            requestsMonitor.getInstances().put(instance.instanceId(), vmWorker);
+            VMWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
             logger.info("Instance " + instance.instanceId() + " added");
         }
 
-        if (requestsMonitor.getInstances().isEmpty()) {
+        if (VMWorkersMonitor.getVmWorkers().isEmpty()) {
             logger.info("No instances found, launching a new one");
             final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
             final var vmWorker = new VMWorker(instance);
-
-            requestsMonitor.getInstances().put(instance.instanceId(), vmWorker);
+            VMWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
+            logger.info("Instance " + instance.instanceId() + " added");
         }
 
         // Start the auto scaler
-        AutoScaler autoScaler = new AutoScaler(requestsMonitor);
+        AutoScaler autoScaler = new AutoScaler(VMWorkersMonitor);
         autoScaler.start();
 
         server.createContext("/", new LoadBalancerHandler(
-                requestsMonitor,
+                VMWorkersMonitor,
                 raytracerRequestMetricRepository,
                 imageProcessorRequestMetricRepository,
                 ec2Client,

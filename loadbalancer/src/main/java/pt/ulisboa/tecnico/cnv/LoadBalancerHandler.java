@@ -9,21 +9,19 @@ import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URLEncodedUtils;
-import org.slf4j.LoggerFactory;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetric;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricRepository;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetric;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetricRepository;
 import pt.ulisboa.tecnico.cnv.utils.AwsUtils;
 import pt.ulisboa.tecnico.cnv.utils.ExceptionUtils;
+import pt.ulisboa.tecnico.cnv.utils.Utils;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.http.HttpStatusCode;
 import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ec2.model.Instance;
 import software.amazon.awssdk.services.lambda.LambdaClient;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -52,12 +50,10 @@ public class LoadBalancerHandler implements HttpHandler {
     public static final String ENHANCEIMAGE_PATH = "/enhanceimage";
 
     private static final ObjectMapper mapper = new ObjectMapper();
-    private static final org.slf4j.Logger log = LoggerFactory.getLogger(LoadBalancerHandler.class);
-
 
     private final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository;
-    private final RequestsMonitor vmWorkersMonitor;
     private final RaytracerRequestMetricRepository raytracerRequestMetricRepository;
+    private final VMWorkersMonitor vmWorkersMonitor;
 
     private final Ec2Client ec2Client;
     private final LambdaClient lambdaClient;
@@ -69,7 +65,7 @@ public class LoadBalancerHandler implements HttpHandler {
     private final String raytracerArn = System.getenv("RAYTRACER_LAMBDA_ARN");
 
     public LoadBalancerHandler(
-            final RequestsMonitor vmWorkersMonitor,
+            final VMWorkersMonitor vmWorkersMonitor,
             RaytracerRequestMetricRepository raytracerRequestMetricRepository,
             final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository,
             final Ec2Client ec2Client,
@@ -94,23 +90,22 @@ public class LoadBalancerHandler implements HttpHandler {
             final var requestURI = exchange.getRequestURI();
             final var requestBody = exchange.getRequestBody().readAllBytes();
 
-            // Estimate the complexity of the request
             final var requestWork = estimateComplexity(requestURI, requestBody);
             logger.info("Received request for " + requestURI + " with complexity " + requestWork);
 
-            final var vmWorkerWithLeastWork = vmWorkersMonitor.getInstances().values().stream()
-                    .filter(vmWorker -> !vmWorker.isTerminating())
+            final var vmWorkerWithLeastWork = vmWorkersMonitor.getVmWorkers().values().stream()
+                    .filter(vmWorker -> !vmWorker.isTerminating() && vmWorker.isInitialized())
                     .filter(vmWorker -> MAX_WORKLOAD - vmWorker.getWork() > requestWork || vmWorker.getNumRequests() == 0)
                     .min(Comparator.comparingDouble(VMWorker::getWork));
 
-            //TODO: Add fault tolerance when for example we redirect to a terminating instance or smthg like that.
+            // TODO: Add fault tolerance when for example we redirect to a terminating instance or smthg like that.
             if (vmWorkerWithLeastWork.isPresent()) {
                 logger.info("Redirecting to VM worker: " + vmWorkerWithLeastWork.get().getInstance().instanceId());
                 redirectToVMWorker(exchange, vmWorkerWithLeastWork.get(), requestURI, requestWork, requestBody);
                 return;
             }
 
-            final var initializingVmWorkerOpt = vmWorkersMonitor.getInstances().values().stream()
+            final var initializingVmWorkerOpt = vmWorkersMonitor.getVmWorkers().values().stream()
                     .filter(vm -> !vm.isInitialized())
                     .findAny();
 
@@ -127,18 +122,30 @@ public class LoadBalancerHandler implements HttpHandler {
                     redirectToVMWorker(exchange, initializingVmWorker, requestURI, requestWork, requestBody);
                 } else {
                     logger.info("Launching a new instance to handle the request");
-                    final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
-                    final var vmWorker = new VMWorker(instance);
+                    Instance instance;
+                    VMWorker vmWorker;
+
+                    synchronized (vmWorkersMonitor) {
+                        instance = AwsUtils.launchInstance(ec2Client);
+                        vmWorker = new VMWorker(instance);
+                        vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
+                    }
+
+                    instance = AwsUtils.waitForInstance(ec2Client, instance.instanceId());
+                    vmWorker.setInstance(instance);
                     vmWorker.setInitialized(true);
+
                     redirectToVMWorker(exchange, vmWorker, requestURI, requestWork, requestBody);
                 }
             } else {
                 logger.info("Simple request, redirecting to a lambda worker");
                 if (initializingVmWorkerOpt.isEmpty()) {
                     logger.info("Launching a new instance to handle requests in a near future");
-                    final var instance = AwsUtils.launchInstance(ec2Client);
-                    final var vmWorker = new VMWorker(instance);
-                    vmWorkersMonitor.getInstances().put(instance.instanceId(), vmWorker);
+                    synchronized (vmWorkersMonitor) {
+                        final var instance = AwsUtils.launchInstance(ec2Client);
+                        final var vmWorker = new VMWorker(instance);
+                        vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
+                    }
                 }
 
                 redirectToLambdaWorker(exchange, requestURI, requestBody);
@@ -299,7 +306,7 @@ public class LoadBalancerHandler implements HttpHandler {
     private long estimateComplexity(final URI requestURI, final byte[] requestBody) throws IOException {
         switch (requestURI.getPath()) {
             case BLURIMAGE_PATH: {
-                final var image = readImage(requestBody);
+                final var image = Utils.readImage(requestBody);
                 final var numPixels = image.getWidth() * image.getHeight();
 
                 final var regression = new CNVMultipleLinearRegression();
@@ -355,16 +362,6 @@ public class LoadBalancerHandler implements HttpHandler {
         }
     }
 
-    private static void applyFunctionToColumn(final double[][] x, final int col, final Consumer<double[]> function) {
-        final var colData = Arrays.stream(x).mapToDouble(row -> row[col]).toArray();
-
-        function.accept(colData);
-
-        for (int i = 0; i < x.length; ++i) {
-            x[i][col] = colData[i];
-        }
-    }
-
     private double[] normalize(final double[][] x, final double[] input) {
         final var normalizedInput = new double[x[0].length];
 
@@ -388,22 +385,13 @@ public class LoadBalancerHandler implements HttpHandler {
         return normalizedInput;
     }
 
+    private static void applyFunctionToColumn(final double[][] x, final int col, final Consumer<double[]> function) {
+        final var colData = Arrays.stream(x).mapToDouble(row -> row[col]).toArray();
 
-    /**
-     * Read an image from a byte array.
-     *
-     * @param data The byte array
-     * @return The image
-     * @throws IOException If an error occurs
-     */
-    private BufferedImage readImage(final byte[] data) throws IOException {
-        // Result syntax: data:image/<format>;base64,<encoded image>
-        String result = new String(data).lines().collect(Collectors.joining("\n"));
-        String[] resultSplits = result.split(",");
+        function.accept(colData);
 
-        byte[] decoded = Base64.getDecoder().decode(resultSplits[1]);
-        ByteArrayInputStream bais = new ByteArrayInputStream(decoded);
-
-        return ImageIO.read(bais);
+        for (int i = 0; i < x.length; ++i) {
+            x[i][col] = colData[i];
+        }
     }
 }

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+source ../aws/config.sh
+
 # CNV-23-24
 # This script will issue in parallel on complex and one simple raytracer request.
 # Modify it so it invokes your correct LB address and port in AWS, i.e., after http://
@@ -33,13 +35,12 @@ function simple {
   echo "Execution time: $duration seconds"
 }
 
+cat "$resources_dir/test-texmap.txt" | jq -sR '{scene: .}' > payload_complex.json
+hexdump -ve '1/1 "%u\n"' "$resources_dir/test-texmap.bmp" | jq -s --argjson original "$(<payload_complex.json)" '$original * {texmap: .}' > payload_complex.json
+
 function complex {
   start=$(date +%s.%N)
 	echo "started raytrace complex"
-	# Add scene.txt raw content to JSON.
-	cat "$resources_dir/test-texmap.txt" | jq -sR '{scene: .}' > payload_complex.json
-	# Add texmap.bmp binary to JSON (optional step, required only for some scenes).
-	hexdump -ve '1/1 "%u\n"' "$resources_dir/test-texmap.bmp" | jq -s --argjson original "$(<payload_complex.json)" '$original * {texmap: .}' > payload_complex.json
 	# Send the request.
 	curl -s -X POST "http://$url/raytracer?scols=400&srows=300&wcols=400&wrows=300&coff=0&roff=0&aa=false" --data @"./payload_complex.json" > result_complex.txt
 	# Remove a formatting string (remove everything before the comma).
@@ -53,5 +54,8 @@ function complex {
 
 # Run 100 requests concurrently and repeat 500 times
 for ((i = 0; i < 50000; i++)); do
-    complex
+    for ((j = 0; j < 1; j++)); do
+        complex &
+    done
+    sleep 3
 done

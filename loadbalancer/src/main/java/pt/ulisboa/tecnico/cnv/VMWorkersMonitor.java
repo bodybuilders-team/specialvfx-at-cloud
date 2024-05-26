@@ -3,17 +3,20 @@ package pt.ulisboa.tecnico.cnv;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class RequestsMonitor {
-    private final Map<String, VMWorker> instances = new ConcurrentHashMap<>();
+/**
+ * Monitors the workers running in the Virtual Machines, including their work and requests.
+ */
+public class VMWorkersMonitor {
+    private final Map<String, VMWorker> vmWorkers = new ConcurrentHashMap<>();
     private long totalWork = 0;
 
-    public RequestsMonitor() {
+    public VMWorkersMonitor() {
         super();
     }
 
 
-    public Map<String, VMWorker> getInstances() {
-        return instances;
+    public Map<String, VMWorker> getVmWorkers() {
+        return vmWorkers;
     }
 
     public long getTotalWork() {
