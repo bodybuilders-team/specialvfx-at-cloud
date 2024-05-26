@@ -24,7 +24,7 @@ aws lambda create-function \
 	--zip-file fileb://../../app/imageproc/target/imageproc-1.0.0-SNAPSHOT-jar-with-dependencies.jar \
 	--handler pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler \
 	--runtime java17 \
-	--timeout 5 \
+	--timeout 300 \
 	--memory-size 256 \
 	--role arn:aws:iam::$AWS_ACCOUNT_ID:role/lambda-role | jq -r '.FunctionArn' > blur-lambda-arn
 
@@ -33,7 +33,7 @@ aws lambda create-function \
 	--zip-file fileb://../../app/imageproc/target/imageproc-1.0.0-SNAPSHOT-jar-with-dependencies.jar \
 	--handler pt.ulisboa.tecnico.cnv.imageproc.EnhanceImageHandler \
 	--runtime java17 \
-	--timeout 5 \
+	--timeout 300 \
 	--memory-size 256 \
 	--role arn:aws:iam::$AWS_ACCOUNT_ID:role/lambda-role | jq -r '.FunctionArn' > enhance-lambda-arn
 
@@ -44,7 +44,7 @@ aws lambda create-function \
   --zip-file fileb://../../app/raytracer/target/raytracer-1.0.0-SNAPSHOT-jar-with-dependencies.jar \
   --handler pt.ulisboa.tecnico.cnv.raytracer.RaytracerHandler \
   --runtime java17 \
-  --timeout 5 \
+	--timeout 300 \
   --memory-size 256 \
   --role arn:aws:iam::$AWS_ACCOUNT_ID:role/lambda-role | jq -r '.FunctionArn' > raytracer-lambda-arn
 

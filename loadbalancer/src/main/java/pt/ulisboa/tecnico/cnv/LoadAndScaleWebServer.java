@@ -46,28 +46,26 @@ public class LoadAndScaleWebServer {
 
 //        // Get all instances of the VM workers
         final Map<String, VMWorkerInfo> vmWorkersInfo = new ConcurrentHashMap<>();
-//        final var instances = AwsUtils.getInstances(ec2Client);
+        final var instances = AwsUtils.getInstances(ec2Client);
 
-//        logger.info("Found " + instances.size() + " instances");
-//        for (var instance : instances) {
-//            final var vmWorker = new VMWorkerInfo(instance);
-//            vmWorker.setInitialized(true);
-//            vmWorkersInfo.put(instance.instanceId(), vmWorker);
-//            logger.info("Instance " + instance.instanceId() + " added");
-//        }
-//
-//        if (vmWorkersInfo.isEmpty()) {
-//            logger.info("No instances found, launching a new one");
-//            final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
-//            final var vmWorker = new VMWorkerInfo(instance);
-//            vmWorker.setInitialized(true);
-//
-//            vmWorkersInfo.put(instance.instanceId(), vmWorker);
-//        }
+        logger.info("Found " + instances.size() + " instances");
+        for (var instance : instances) {
+            final var vmWorker = new VMWorkerInfo(instance);
+            vmWorkersInfo.put(instance.instanceId(), vmWorker);
+            logger.info("Instance " + instance.instanceId() + " added");
+        }
 
-//        // Start the auto scaler
-//        AutoScaler autoScaler = new AutoScaler(vmWorkersInfo);
-//        autoScaler.start();
+        if (vmWorkersInfo.isEmpty()) {
+            logger.info("No instances found, launching a new one");
+            final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
+            final var vmWorker = new VMWorkerInfo(instance);
+
+            vmWorkersInfo.put(instance.instanceId(), vmWorker);
+        }
+
+        // Start the auto scaler
+        AutoScaler autoScaler = new AutoScaler(vmWorkersInfo);
+        autoScaler.start();
 
         server.createContext("/", new LoadBalancerHandler(
                 vmWorkersInfo,

@@ -11,7 +11,6 @@ public class VMWorkerInfo {
     private Instance instance;
     private double cpuUsage = 0;
     private long work = 0;
-    private boolean initialized = false;
 
     public VMWorkerInfo(final Instance instance) {
         this.instance = instance;
@@ -23,14 +22,6 @@ public class VMWorkerInfo {
 
     public synchronized void removeWork(long work) {
         this.work -= work;
-    }
-
-    public synchronized void setInitialized(final boolean initialized) {
-        this.initialized = initialized;
-    }
-
-    public boolean isInitialized() {
-        return initialized;
     }
 
     public Instance getInstance() {

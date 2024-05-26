@@ -43,9 +43,6 @@ function complex {
 
 # Run 100 requests concurrently and repeat 500 times
 for ((i = 0; i < 50000; i++)); do
-    for ((j = 0; j < 10; j++)); do
-        simple &
-    done
-    # Wait for all background jobs to finish before starting the next batch
-    wait
+      simple &
+      sleep 1
 done

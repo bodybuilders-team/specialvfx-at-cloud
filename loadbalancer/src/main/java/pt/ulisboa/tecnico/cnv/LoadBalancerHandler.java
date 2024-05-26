@@ -9,6 +9,7 @@ import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
 import org.apache.http.NameValuePair;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URLEncodedUtils;
+import org.slf4j.LoggerFactory;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetric;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricRepository;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetric;
@@ -32,18 +33,17 @@ import java.util.function.Consumer;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
+import static pt.ulisboa.tecnico.cnv.AutoScaler.*;
+
 public class LoadBalancerHandler implements HttpHandler {
     private static final double EPSILON = 1e-6;
     private static final int PORT = 8000;
-    private static final long DEFAULT_COMPLEXITY_RAYTRACER = 500000000;
-    private static final long DEFAULT_COMPLEXITY_IMAGE_PROCESSOR = 430000000;
-    public static final long COMPLEX_REQUEST_THRESHOLD = DEFAULT_COMPLEXITY_RAYTRACER * 2;
-    public static final int OVERLOAD_THRESHOLD = 80;
     public static final String RAYTRACER_PATH = "/raytracer";
     public static final String BLURIMAGE_PATH = "/blurimage";
     public static final String ENHANCEIMAGE_PATH = "/enhanceimage";
 
     private static final ObjectMapper mapper = new ObjectMapper();
+    private static final org.slf4j.Logger log = LoggerFactory.getLogger(LoadBalancerHandler.class);
 
 
     private final Map<String, VMWorkerInfo> vmWorkersInfo;
@@ -75,17 +75,7 @@ public class LoadBalancerHandler implements HttpHandler {
 
     @Override
     public void handle(final HttpExchange exchange) throws IOException {
-        exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-
-        if (exchange.getRequestMethod().equalsIgnoreCase("OPTIONS")) {
-            exchange.getResponseHeaders().add("Access-Control-Allow-Methods", "POST, OPTIONS");
-            exchange.getResponseHeaders().add("Access-Control-Allow-Headers", "Content-Type,Authorization");
-            exchange.sendResponseHeaders(204, -1);
-            return;
-        }
-
         try {
-
             logger.info("Received request for " + exchange.getRequestURI());
             if (!exchange.getRequestMethod().equals(HttpPost.METHOD_NAME)) {
                 exchange.sendResponseHeaders(HttpStatusCode.METHOD_NOT_ALLOWED, -1);
@@ -96,125 +86,86 @@ public class LoadBalancerHandler implements HttpHandler {
             final var requestBody = exchange.getRequestBody().readAllBytes();
 
             // Estimate the complexity of the request
-            final var requestComplexity = estimateComplexity(requestURI, requestBody);
-            logger.info("Received request for " + requestURI + " with complexity " + requestComplexity);
+            final var requestWork = estimateComplexity(requestURI, requestBody);
+            logger.info("Received request for " + requestURI + " with complexity " + requestWork);
 
             // Check if the vms are overloaded
-            final var averageCpuUsage = vmWorkersInfo.values().stream()
-                    .mapToDouble(VMWorkerInfo::getCpuUsage)
-                    .average()
-                    .orElse(0);
-
+            final var selectedInstance = vmWorkersInfo.values().stream()
+                    .filter(vm -> MAX_WORKLOAD - vm.getWork() > requestWork)
+                    .min(Comparator.comparingDouble(VMWorkerInfo::getWork));
 
             //TODO: Add fault tolerance when for example we redirect to a terminating instance or smthg like that.
+            if (selectedInstance.isEmpty()) {
+                logger.info("Redirecting to lambda worker, no vm available with enough capacity");
 
-//            if (averageCpuUsage > OVERLOAD_THRESHOLD) {
-//                logger.info("Average CPU usage is " + averageCpuUsage + ", launching a new instance");
-//
-//                // If any instance is initializing, wait for it to be initialized
-//                final var initializingInstanceOpt = vmWorkersInfo.values().stream()
-//                        .filter(vmWorkerInfo -> !vmWorkerInfo.isInitialized())
-//                        .findAny();
-//
-//                if (initializingInstanceOpt.isPresent()) {
-//                    var initializingInstance = initializingInstanceOpt.get();
-//                    logger.info("Waiting for instance to be initialized");
-//                    final var instance = AwsUtils.waitForInstance(ec2Client, initializingInstance.getInstance().instanceId());
-//
-//                    initializingInstance.setInstance(instance);
-//                    initializingInstance.setInitialized(true);
-//
-//                    redirectToVMWorker(exchange, initializingInstance, requestURI, requestComplexity, requestBody);
-//                    return;
-//                }
-//
-//                if (requestComplexity > COMPLEX_REQUEST_THRESHOLD) {
-//                    logger.info("Request is complex, sending to new instance");
-//
-//                    final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
-//                    final var vmWorker = new VMWorkerInfo(instance);
-//                    vmWorker.setInitialized(true);
-//
-//                    vmWorkersInfo.put(instance.instanceId(), vmWorker);
-//
-//                    redirectToVMWorker(exchange, vmWorker, requestURI, requestComplexity, requestBody);
-//                } else {
-//            final var newVmWorker = AwsUtils.launchInstance(ec2Client);
-//            final var vmWorker = new VMWorkerInfo(newVmWorker);
-
-//            vmWorkersInfo.put(newVmWorker.instanceId(), vmWorker);
-
-            logger.info("Request is simple, sending to lambda");
-
-
-            final String functionName;
-            final Map<String, String> payload;
-            final String outputFormat;
-
-            switch (requestURI.getPath()) {
-                case BLURIMAGE_PATH:
-                    functionName = blurArn;
-                    payload = encodeImageProcLambdaRequest(requestBody);
-                    outputFormat = payload.get("fileFormat");
-                    break;
-                case ENHANCEIMAGE_PATH:
-                    functionName = enhanceArn;
-                    payload = encodeImageProcLambdaRequest(requestBody);
-                    outputFormat = payload.get("fileFormat");
-                    break;
-                case RAYTRACER_PATH:
-                    functionName = raytracerArn;
-                    final Map<String, String> parameters = URLEncodedUtils.parse(requestURI, Charset.defaultCharset())
-                            .stream()
-                            .collect(Collectors.toMap(NameValuePair::getName, NameValuePair::getValue));
-                    payload = encodeRaytracerLambdaRequest(requestBody, parameters);
-                    outputFormat = "bmp";
-                    break;
-                default:
-                    exchange.sendResponseHeaders(HttpStatusCode.BAD_REQUEST, -1);
-                    return;
+                redirectToLambdaWorker(exchange, requestURI, requestBody);
+                return;
             }
 
 
-            final var requestJson = new GsonBuilder().disableHtmlEscaping().create().toJson(payload);
-
-
-            final var response = lambdaClient.invoke(req -> req
-                    .functionName(functionName)
-                    .payload(SdkBytes.fromUtf8String(requestJson))
-            );
-
-            // TODO: Stream the response
-            final var responseBody = response.payload().asByteArray();
-
-            final var responseBodyStr = new String(responseBody);
-
-            final var output = String.format("data:image/%s;base64,%s", outputFormat, responseBodyStr.substring(1, responseBodyStr.length() - 1));
-
-            exchange.sendResponseHeaders(response.statusCode(), output.getBytes().length);
-
-            try (var os = exchange.getResponseBody()) {
-                os.write(output.getBytes());
-            }
-
-
-//                }
-            return;
-//            }
-
-            // Send the request to the instance with the least CPU usage
-//            final var instanceWithLeastCpuUsage = vmWorkersInfo.values().stream()
-//                    .filter(VMWorkerInfo::isInitialized)
-//                    .min(Comparator.comparingDouble(VMWorkerInfo::getCpuUsage))// TODO: Use instance work and implement work left
-//                    .orElseThrow(); // TODO: Or else, wait for an instance to be available
-//
-//            redirectToVMWorker(exchange, instanceWithLeastCpuUsage, requestURI, requestComplexity, requestBody);
-//
+            // Redirect the request to the instance that will process it
+            redirectToVMWorker(exchange, selectedInstance.get(), requestURI, requestWork, requestBody);
         } catch (Exception e) {
             logger.severe(ExceptionUtils.getStackTrace(e));
             exchange.sendResponseHeaders(HttpURLConnection.HTTP_INTERNAL_ERROR, -1);
         } finally {
+            logger.info("Closing exchange");
             exchange.close();
+        }
+    }
+
+    private void redirectToLambdaWorker(final HttpExchange exchange, final URI requestURI, final byte[] requestBody) throws IOException {
+        final String functionName;
+        final Map<String, String> payload;
+        final String outputFormat;
+
+        switch (requestURI.getPath()) {
+            case BLURIMAGE_PATH:
+                functionName = blurArn;
+                payload = encodeImageProcLambdaRequest(requestBody);
+                outputFormat = payload.get("fileFormat");
+                break;
+            case ENHANCEIMAGE_PATH:
+                functionName = enhanceArn;
+                payload = encodeImageProcLambdaRequest(requestBody);
+                outputFormat = payload.get("fileFormat");
+                break;
+            case RAYTRACER_PATH:
+                functionName = raytracerArn;
+                final Map<String, String> parameters = URLEncodedUtils.parse(requestURI, Charset.defaultCharset())
+                        .stream()
+                        .collect(Collectors.toMap(NameValuePair::getName, NameValuePair::getValue));
+                payload = encodeRaytracerLambdaRequest(requestBody, parameters);
+                outputFormat = "bmp";
+                break;
+            default:
+                exchange.sendResponseHeaders(HttpStatusCode.BAD_REQUEST, -1);
+                return;
+        }
+
+
+        final var requestJson = new GsonBuilder().disableHtmlEscaping().create().toJson(payload);
+
+
+        final var response = lambdaClient.invoke(req -> req
+                .functionName(functionName)
+                .payload(SdkBytes.fromUtf8String(requestJson))
+        );
+
+        // TODO: Stream the response
+        final var responseBody = response.payload().asByteArray();
+
+        final var responseBodyStr = new String(responseBody);
+
+        final var output = String.format("data:image/%s;base64,%s", outputFormat, responseBodyStr.substring(1, responseBodyStr.length() - 1));
+
+
+        exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+
+        exchange.sendResponseHeaders(response.statusCode(), output.getBytes().length);
+
+        try (var os = exchange.getResponseBody()) {
+            os.write(output.getBytes());
         }
     }
 
@@ -271,8 +222,11 @@ public class LoadBalancerHandler implements HttpHandler {
         logger.info("Redirecting to " + instanceUri);
 
         instance.addWork(requestComplexity);
-        redirect(exchange, requestBody, instanceUri);
-        instance.removeWork(requestComplexity);
+        try {
+            redirect(exchange, requestBody, instanceUri);
+        } finally {
+            instance.removeWork(requestComplexity);
+        }
     }
 
     /**
@@ -295,7 +249,7 @@ public class LoadBalancerHandler implements HttpHandler {
                 final var requests = imageProcessorRequestMetricRepository.getAllRequests();
 
                 if (requests.size() <= 1)
-                    return DEFAULT_COMPLEXITY_IMAGE_PROCESSOR;
+                    return DEFAULT_WORK_IMAGE_PROCESSOR;
 
                 final var y = requests.stream().mapToDouble(ImageProcessorRequestMetric::getInstructionCount).toArray();
 
@@ -326,7 +280,7 @@ public class LoadBalancerHandler implements HttpHandler {
                 final var requests = raytracerRequestMetricRepository.getAllRequests();
 
                 if (requests.size() <= 1)
-                    return DEFAULT_COMPLEXITY_RAYTRACER;
+                    return DEFAULT_WORK_RAYTRACER;
 
                 final var y = requests.stream().mapToDouble(RaytracerRequestMetric::getInstructionCount).toArray();
 
