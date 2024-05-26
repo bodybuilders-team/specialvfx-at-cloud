@@ -30,7 +30,7 @@ public class AutoScaler {
         new Thread(() -> {
             try {
                 while (true) {
-                    monitor();
+                    monitorInstances();
                     terminateMarkedInstances();
                     Thread.sleep(2000);
                 }
@@ -52,34 +52,38 @@ public class AutoScaler {
         }
     }
 
-    private void monitor() throws InterruptedException {
+    private void monitorInstances() throws InterruptedException {
         final var instances = requestsMonitor.getInstances();
         // Updates the CPU usage of the instances
         AwsUtils.getCpuUsage(cloudWatchClient, instances.keySet().stream().toList())
                 .forEach((instanceId, cpuUsage) -> instances.get(instanceId).setCpuUsage(cpuUsage));
 
         final var averageWork = instances.values().stream()
-                .mapToDouble(VMInstance::getWork)
+                .filter(vm -> !vm.isTerminating() && !vm.isInitialized())
+                .mapToDouble(VMWorker::getWork)
                 .average()
                 .orElse(0);
 
-//        final var averageCpuUsage = instances.values().stream()
-//                .mapToDouble(VMWorkerInfo::getCpuUsage)
-//                .average()
-//                .orElse(0);
+        final var averageCpuUsage = instances.values().stream()
+                .filter(vm -> !vm.isTerminating() && !vm.isInitialized())
+                .mapToDouble(VMWorker::getCpuUsage)
+                .average()
+                .orElse(0);
 
         logger.info("Average work: " + averageWork);
         logger.info("Instances: " + instances.size());
 
         // Check if we need to scale up, down or do nothing
-        if (averageWork > 0.8 * MAX_WORKLOAD) {
+        if (averageWork > 0.7 * MAX_WORKLOAD) {
             final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
-            instances.put(instance.instanceId(), new VMInstance(instance));
-        } else if (averageWork < 0.2 * MAX_WORKLOAD && instances.size() > 1) {
+            final var vmWorker = new VMWorker(instance);
+            vmWorker.setInitialized(true);
+            instances.put(instance.instanceId(), vmWorker);
+        } else if (averageWork < 0.3 * MAX_WORKLOAD && instances.size() > 1) {
             instances.values().stream()
-                    .filter(vm -> !vm.isTerminating())
-                    .min(Comparator.comparingDouble(VMInstance::getCpuUsage))
-                    .ifPresent(VMInstance::markForTermination);
+                    .filter(vm -> !vm.isTerminating() && !vm.isInitialized())
+                    .min(Comparator.comparingDouble(VMWorker::getCpuUsage))
+                    .ifPresent(VMWorker::markForTermination);
         }
     }
 }

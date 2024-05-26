@@ -14,6 +14,7 @@ import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetric;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricRepository;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetric;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetricRepository;
+import pt.ulisboa.tecnico.cnv.utils.AwsUtils;
 import pt.ulisboa.tecnico.cnv.utils.ExceptionUtils;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.http.HttpStatusCode;
@@ -28,12 +29,20 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-import static pt.ulisboa.tecnico.cnv.AutoScaler.*;
+import static pt.ulisboa.tecnico.cnv.AutoScaler.COMPLEX_REQUEST_THRESHOLD;
+import static pt.ulisboa.tecnico.cnv.AutoScaler.DEFAULT_WORK_IMAGE_PROCESSOR;
+import static pt.ulisboa.tecnico.cnv.AutoScaler.DEFAULT_WORK_RAYTRACER;
+import static pt.ulisboa.tecnico.cnv.AutoScaler.MAX_WORKLOAD;
 
 public class LoadBalancerHandler implements HttpHandler {
     private static final double EPSILON = 1e-6;
@@ -47,7 +56,7 @@ public class LoadBalancerHandler implements HttpHandler {
 
 
     private final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository;
-    private final RequestsMonitor requestsMonitor;
+    private final RequestsMonitor vmWorkersMonitor;
     private final RaytracerRequestMetricRepository raytracerRequestMetricRepository;
 
     private final Ec2Client ec2Client;
@@ -60,13 +69,13 @@ public class LoadBalancerHandler implements HttpHandler {
     private final String raytracerArn = System.getenv("RAYTRACER_LAMBDA_ARN");
 
     public LoadBalancerHandler(
-            final RequestsMonitor requestsMonitor,
+            final RequestsMonitor vmWorkersMonitor,
             RaytracerRequestMetricRepository raytracerRequestMetricRepository,
             final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository,
             final Ec2Client ec2Client,
             final LambdaClient lambdaClient
     ) {
-        this.requestsMonitor = requestsMonitor;
+        this.vmWorkersMonitor = vmWorkersMonitor;
         this.raytracerRequestMetricRepository = raytracerRequestMetricRepository;
         this.imageProcessorRequestMetricRepository = imageProcessorRequestMetricRepository;
         this.ec2Client = ec2Client;
@@ -89,24 +98,51 @@ public class LoadBalancerHandler implements HttpHandler {
             final var requestWork = estimateComplexity(requestURI, requestBody);
             logger.info("Received request for " + requestURI + " with complexity " + requestWork);
 
-            // Check if the vms are overloaded
-            final var selectedInstance = requestsMonitor.getInstances().values().stream()
-                    .filter(vm -> MAX_WORKLOAD - vm.getWork() > requestWork)
-                    .filter(vm -> !vm.isTerminating())
-                    .min(Comparator.comparingDouble(VMInstance::getWork));
+            final var vmWorkerWithLeastWork = vmWorkersMonitor.getInstances().values().stream()
+                    .filter(vmWorker -> !vmWorker.isTerminating())
+                    .filter(vmWorker -> MAX_WORKLOAD - vmWorker.getWork() > requestWork || vmWorker.getNumRequests() == 0)
+                    .min(Comparator.comparingDouble(VMWorker::getWork));
 
             //TODO: Add fault tolerance when for example we redirect to a terminating instance or smthg like that.
-            if (selectedInstance.isEmpty()) {
-                logger.info("Redirecting to lambda worker, no vm available with enough capacity");
-
-                redirectToLambdaWorker(exchange, requestURI, requestWork, requestBody);
+            if (vmWorkerWithLeastWork.isPresent()) {
+                logger.info("Redirecting to VM worker: " + vmWorkerWithLeastWork.get().getInstance().instanceId());
+                redirectToVMWorker(exchange, vmWorkerWithLeastWork.get(), requestURI, requestWork, requestBody);
                 return;
             }
 
+            final var initializingVmWorkerOpt = vmWorkersMonitor.getInstances().values().stream()
+                    .filter(vm -> !vm.isInitialized())
+                    .findAny();
 
-            // Redirect the request to the instance that will process it
-            logger.info("Redirecting to VM worker: " + selectedInstance.get().getInstance().instanceId());
-            redirectToVMWorker(exchange, selectedInstance.get(), requestURI, requestWork, requestBody);
+            if (requestWork > COMPLEX_REQUEST_THRESHOLD) {
+                logger.info("Complex request, redirecting to a vm worker");
+                if (initializingVmWorkerOpt.isPresent()) {
+                    logger.info("An instance is initializing, waiting for it to be ready");
+                    var initializingVmWorker = initializingVmWorkerOpt.get();
+                    final var instance = AwsUtils.waitForInstance(ec2Client, initializingVmWorker.getInstance().instanceId());
+
+                    initializingVmWorker.setInstance(instance);
+                    initializingVmWorker.setInitialized(true);
+
+                    redirectToVMWorker(exchange, initializingVmWorker, requestURI, requestWork, requestBody);
+                } else {
+                    logger.info("Launching a new instance to handle the request");
+                    final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
+                    final var vmWorker = new VMWorker(instance);
+                    vmWorker.setInitialized(true);
+                    redirectToVMWorker(exchange, vmWorker, requestURI, requestWork, requestBody);
+                }
+            } else {
+                logger.info("Simple request, redirecting to a lambda worker");
+                if (initializingVmWorkerOpt.isEmpty()) {
+                    logger.info("Launching a new instance to handle requests in a near future");
+                    final var instance = AwsUtils.launchInstance(ec2Client);
+                    final var vmWorker = new VMWorker(instance);
+                    vmWorkersMonitor.getInstances().put(instance.instanceId(), vmWorker);
+                }
+
+                redirectToLambdaWorker(exchange, requestURI, requestBody);
+            }
         } catch (Exception e) {
             logger.severe(ExceptionUtils.getStackTrace(e));
             exchange.sendResponseHeaders(HttpURLConnection.HTTP_INTERNAL_ERROR, -1);
@@ -116,64 +152,107 @@ public class LoadBalancerHandler implements HttpHandler {
         }
     }
 
-    private void redirectToLambdaWorker(final HttpExchange exchange, final URI requestURI, final long requestWork, final byte[] requestBody) throws IOException {
-        requestsMonitor.addWork(requestWork);
 
+    /**
+     * Redirect the request to the instance that will process it.
+     * It will increment the work of the instance and decrement it after the request is processed.
+     */
+    private void redirectToVMWorker(
+            HttpExchange exchange,
+            VMWorker instance,
+            URI requestURI,
+            long requestComplexity,
+            byte[] requestBody
+    ) throws URISyntaxException, IOException {
+        final var instanceUri = new URI("http://" + instance.getInstance().publicDnsName() + ":" + PORT + requestURI);
+
+        vmWorkersMonitor.addWork(instance, requestComplexity);
         try {
-            final String functionName;
-            final Map<String, String> payload;
-            final String outputFormat;
+            final var connection = (HttpURLConnection) instanceUri.toURL().openConnection();
 
-            switch (requestURI.getPath()) {
-                case BLURIMAGE_PATH:
-                    functionName = blurArn;
-                    payload = encodeImageProcLambdaRequest(requestBody);
-                    outputFormat = payload.get("fileFormat");
-                    break;
-                case ENHANCEIMAGE_PATH:
-                    functionName = enhanceArn;
-                    payload = encodeImageProcLambdaRequest(requestBody);
-                    outputFormat = payload.get("fileFormat");
-                    break;
-                case RAYTRACER_PATH:
-                    functionName = raytracerArn;
-                    final Map<String, String> parameters = URLEncodedUtils.parse(requestURI, Charset.defaultCharset())
-                            .stream()
-                            .collect(Collectors.toMap(NameValuePair::getName, NameValuePair::getValue));
-                    payload = encodeRaytracerLambdaRequest(requestBody, parameters);
-                    outputFormat = "bmp";
-                    break;
-                default:
-                    exchange.sendResponseHeaders(HttpStatusCode.BAD_REQUEST, -1);
-                    return;
+            connection.setRequestMethod(exchange.getRequestMethod());
+            exchange.getRequestHeaders().forEach((k, v) -> v.forEach(h -> connection.setRequestProperty(k, h)));
+            connection.setDoOutput(true);
+
+            try (var os = connection.getOutputStream()) {
+                os.write(requestBody);
             }
 
+            connection.connect();
+            connection.getHeaderFields().forEach((k, v) -> {
+                if (k != null)
+                    v.forEach(h -> exchange.getResponseHeaders().add(k, h));
+            });
 
-            final var requestJson = new GsonBuilder().disableHtmlEscaping().create().toJson(payload);
+            exchange.sendResponseHeaders(connection.getResponseCode(), connection.getContentLengthLong());
 
-
-            final var response = lambdaClient.invoke(req -> req
-                    .functionName(functionName)
-                    .payload(SdkBytes.fromUtf8String(requestJson))
-            );
-
-            // TODO: Stream the response
-            final var responseBody = response.payload().asByteArray();
-
-            final var responseBodyStr = new String(responseBody);
-
-            final var output = String.format("data:image/%s;base64,%s", outputFormat, responseBodyStr.substring(1, responseBodyStr.length() - 1));
-
-
-            exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
-
-            exchange.sendResponseHeaders(response.statusCode(), output.getBytes().length);
-
-            try (var os = exchange.getResponseBody()) {
-                os.write(output.getBytes());
+            try (
+                    var os = exchange.getResponseBody();
+                    var is = connection.getInputStream()
+            ) {
+                is.transferTo(os);
             }
+
+            connection.disconnect();
         } finally {
-            requestsMonitor.removeWork(requestWork);
+            vmWorkersMonitor.removeWork(instance, requestComplexity);
+        }
+    }
+
+
+    /**
+     * Redirect the request to a lambda worker, according to the request URI.
+     */
+    private void redirectToLambdaWorker(
+            final HttpExchange exchange,
+            final URI requestURI,
+            final byte[] requestBody
+    ) throws IOException {
+        final String functionName;
+        final Map<String, String> payload;
+        final String outputFormat;
+
+        switch (requestURI.getPath()) {
+            case BLURIMAGE_PATH:
+                functionName = blurArn;
+                payload = encodeImageProcLambdaRequest(requestBody);
+                outputFormat = payload.get("fileFormat");
+                break;
+            case ENHANCEIMAGE_PATH:
+                functionName = enhanceArn;
+                payload = encodeImageProcLambdaRequest(requestBody);
+                outputFormat = payload.get("fileFormat");
+                break;
+            case RAYTRACER_PATH:
+                functionName = raytracerArn;
+                final Map<String, String> parameters = URLEncodedUtils.parse(requestURI, Charset.defaultCharset())
+                        .stream()
+                        .collect(Collectors.toMap(NameValuePair::getName, NameValuePair::getValue));
+                payload = encodeRaytracerLambdaRequest(requestBody, parameters);
+                outputFormat = "bmp";
+                break;
+            default:
+                exchange.sendResponseHeaders(HttpStatusCode.BAD_REQUEST, -1);
+                return;
+        }
+
+        final var requestJson = new GsonBuilder().disableHtmlEscaping().create().toJson(payload);
+
+        final var response = lambdaClient.invoke(req -> req
+                .functionName(functionName)
+                .payload(SdkBytes.fromUtf8String(requestJson))
+        );
+
+        // TODO: Stream the response
+        final var responseBody = response.payload().asByteArray();
+        final var responseBodyStr = new String(responseBody);
+        final var output = String.format("data:image/%s;base64,%s", outputFormat, responseBodyStr.substring(1, responseBodyStr.length() - 1));
+
+        exchange.getResponseHeaders().add("Access-Control-Allow-Origin", "*");
+        exchange.sendResponseHeaders(response.statusCode(), output.getBytes().length);
+
+        try (var os = exchange.getResponseBody()) {
+            os.write(output.getBytes());
         }
     }
 
@@ -215,41 +294,13 @@ public class LoadBalancerHandler implements HttpHandler {
     }
 
     /**
-     * Redirect the request to the instance that will process it.
-     * It will increment the work of the instance and decrement it after the request is processed.
-     */
-    private void redirectToVMWorker(
-            HttpExchange exchange,
-            VMInstance instance,
-            URI requestURI,
-            long requestComplexity,
-            byte[] requestBody
-    ) throws URISyntaxException, IOException {
-        final var instanceUri = new URI("http://" + instance.getInstance().publicDnsName() + ":" + PORT + requestURI);
-
-        requestsMonitor.addWork(instance, requestComplexity);
-        try {
-            redirect(exchange, requestBody, instanceUri);
-        } finally {
-            requestsMonitor.removeWork(instance, requestComplexity);
-        }
-    }
-
-    /**
-     * Estimate the complexity of the request.
-     *
-     * @param requestURI  The request URI
-     * @param requestBody The request body
-     * @return The estimated complexity
-     * @throws IOException If an error occurs
+     * Estimate the complexity of the request, based on the request type and its parameters.
      */
     private long estimateComplexity(final URI requestURI, final byte[] requestBody) throws IOException {
         switch (requestURI.getPath()) {
             case BLURIMAGE_PATH: {
                 final var image = readImage(requestBody);
                 final var numPixels = image.getWidth() * image.getHeight();
-
-                System.out.println("numPixels = " + numPixels);
 
                 final var regression = new CNVMultipleLinearRegression();
                 final var requests = imageProcessorRequestMetricRepository.getAllRequests();
@@ -272,8 +323,6 @@ public class LoadBalancerHandler implements HttpHandler {
                 final Map<String, String> parameters = URLEncodedUtils.parse(requestURI, Charset.defaultCharset())
                         .stream()
                         .collect(Collectors.toMap(NameValuePair::getName, NameValuePair::getValue));
-
-                System.out.println("parameters = " + parameters);
 
                 int scols = Integer.parseInt(parameters.get("scols"));
                 int srows = Integer.parseInt(parameters.get("srows"));
@@ -337,46 +386,6 @@ public class LoadBalancerHandler implements HttpHandler {
             normalizedInput[col] = (input[col] - mean) / (standardDeviation + EPSILON);
         }
         return normalizedInput;
-    }
-
-    /**
-     * Redirect the request to the instance that will process it.
-     *
-     * @param exchange    The exchange
-     * @param requestBody The request body
-     * @param uri         The URI of the instance
-     * @throws IOException If an error occurs
-     */
-    private void redirect(final HttpExchange exchange, final byte[] requestBody, final URI uri) throws IOException {
-        final var connection = (HttpURLConnection) uri.toURL().openConnection();
-
-        connection.setRequestMethod(exchange.getRequestMethod());
-
-        exchange.getRequestHeaders().forEach((k, v) -> v.forEach(h -> connection.setRequestProperty(k, h)));
-
-        connection.setDoOutput(true);
-
-        try (var os = connection.getOutputStream()) {
-            os.write(requestBody);
-        }
-
-        connection.connect();
-
-        connection.getHeaderFields().forEach((k, v) -> {
-            if (k != null)
-                v.forEach(h -> exchange.getResponseHeaders().add(k, h));
-        });
-
-        exchange.sendResponseHeaders(connection.getResponseCode(), connection.getContentLengthLong());
-
-        try (
-                var os = exchange.getResponseBody();
-                var is = connection.getInputStream()
-        ) {
-            is.transferTo(os);
-        }
-
-        connection.disconnect();
     }
 
 
