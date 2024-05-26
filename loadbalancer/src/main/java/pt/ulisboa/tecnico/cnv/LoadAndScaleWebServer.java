@@ -1,6 +1,9 @@
 package pt.ulisboa.tecnico.cnv;
 
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import org.apache.http.client.methods.HttpGet;
 import pt.ulisboa.tecnico.cnv.mss.DynamoDbClientManager;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricDynamoDbRepositoryImpl;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricRepository;
@@ -13,6 +16,7 @@ import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.lambda.LambdaClient;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -79,7 +83,27 @@ public class LoadAndScaleWebServer {
                 /*imageProcessorArn=*/args[0],
                 /*raytracerArn=*/args[1]
         ));
+
+        // Health check endpoint
+        server.createContext("/test", new HealthCheckHandler());
+
         server.start();
         logger.info("Server started on http://localhost:" + PORT + "/");
+    }
+
+
+    static class HealthCheckHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if (HttpGet.METHOD_NAME.equals(exchange.getRequestMethod())) {
+                String response = "OK";
+                exchange.sendResponseHeaders(200, response.getBytes().length);
+                try (OutputStream os = exchange.getResponseBody()) {
+                    os.write(response.getBytes());
+                }
+            } else {
+                exchange.sendResponseHeaders(405, -1); // Method Not Allowed
+            }
+        }
     }
 }
