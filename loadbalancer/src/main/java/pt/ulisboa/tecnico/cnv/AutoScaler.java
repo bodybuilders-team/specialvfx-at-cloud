@@ -105,6 +105,8 @@ public class AutoScaler {
                     .min(Comparator.comparingDouble(VMWorkerInfo::getCpuUsage))
                     .ifPresent(instance -> {
                                 //TODO, only delete after every request has been processed
+                                //TODO: Add terminating flag, to avoid this instance getting more requests
+                                //TODO: Wait until the work is == 0
                                 instanceInfoMap.remove(instance.getInstance().instanceId());
                                 AwsUtils.deleteInstance(ec2Client, instance.getInstance().instanceId());
                             }

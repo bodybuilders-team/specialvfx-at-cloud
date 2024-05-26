@@ -1,6 +1,8 @@
 package pt.ulisboa.tecnico.cnv;
 
-import com.google.gson.Gson;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.GsonBuilder;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import org.apache.commons.math3.stat.descriptive.DescriptiveStatistics;
@@ -11,7 +13,6 @@ import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetric;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricRepository;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetric;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetricRepository;
-import pt.ulisboa.tecnico.cnv.utils.AwsUtils;
 import pt.ulisboa.tecnico.cnv.utils.ExceptionUtils;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.http.HttpStatusCode;
@@ -26,10 +27,7 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
@@ -43,6 +41,10 @@ public class LoadBalancerHandler implements HttpHandler {
     public static final int OVERLOAD_THRESHOLD = 80;
     public static final String RAYTRACER_PATH = "/raytracer";
     public static final String BLURIMAGE_PATH = "/blurimage";
+    public static final String ENHANCEIMAGE_PATH = "/enhanceimage";
+
+    private static final ObjectMapper mapper = new ObjectMapper();
+
 
     private final Map<String, VMWorkerInfo> vmWorkersInfo;
     private final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository;
@@ -53,25 +55,22 @@ public class LoadBalancerHandler implements HttpHandler {
 
     private static final Logger logger = Logger.getLogger(LoadBalancerHandler.class.getName());
 
-    private final String imageProcessorArn;
-    private final String raytracerArn;
+    private final String blurArn = System.getenv("BLUR_LAMBDA_ARN");
+    private final String enhanceArn = System.getenv("ENHANCE_LAMBDA_ARN");
+    private final String raytracerArn = System.getenv("RAYTRACER_LAMBDA_ARN");
 
     public LoadBalancerHandler(
             final Map<String, VMWorkerInfo> vmWorkersInfo,
             RaytracerRequestMetricRepository raytracerRequestMetricRepository,
             final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository,
             final Ec2Client ec2Client,
-            final LambdaClient lambdaClient,
-            final String imageProcessorArn,
-            final String raytracerArn
+            final LambdaClient lambdaClient
     ) {
         this.vmWorkersInfo = vmWorkersInfo;
         this.raytracerRequestMetricRepository = raytracerRequestMetricRepository;
         this.imageProcessorRequestMetricRepository = imageProcessorRequestMetricRepository;
         this.ec2Client = ec2Client;
         this.lambdaClient = lambdaClient;
-        this.imageProcessorArn = imageProcessorArn;
-        this.raytracerArn = raytracerArn;
     }
 
     @Override
@@ -140,34 +139,62 @@ public class LoadBalancerHandler implements HttpHandler {
 //
 //                    redirectToVMWorker(exchange, vmWorker, requestURI, requestComplexity, requestBody);
 //                } else {
-            final var newVmWorker = AwsUtils.launchInstance(ec2Client);
-            final var vmWorker = new VMWorkerInfo(newVmWorker);
+//            final var newVmWorker = AwsUtils.launchInstance(ec2Client);
+//            final var vmWorker = new VMWorkerInfo(newVmWorker);
 
-            vmWorkersInfo.put(newVmWorker.instanceId(), vmWorker);
+//            vmWorkersInfo.put(newVmWorker.instanceId(), vmWorker);
 
             logger.info("Request is simple, sending to lambda");
 
 
-            var payload = encodeImage(requestBody);
+            final String functionName;
+            final Map<String, String> payload;
+            final String outputFormat;
+
+            switch (requestURI.getPath()) {
+                case BLURIMAGE_PATH:
+                    functionName = blurArn;
+                    payload = encodeImageProcLambdaRequest(requestBody);
+                    outputFormat = payload.get("fileFormat");
+                    break;
+                case ENHANCEIMAGE_PATH:
+                    functionName = enhanceArn;
+                    payload = encodeImageProcLambdaRequest(requestBody);
+                    outputFormat = payload.get("fileFormat");
+                    break;
+                case RAYTRACER_PATH:
+                    functionName = raytracerArn;
+                    final Map<String, String> parameters = URLEncodedUtils.parse(requestURI, Charset.defaultCharset())
+                            .stream()
+                            .collect(Collectors.toMap(NameValuePair::getName, NameValuePair::getValue));
+                    payload = encodeRaytracerLambdaRequest(requestBody, parameters);
+                    outputFormat = "bmp";
+                    break;
+                default:
+                    exchange.sendResponseHeaders(HttpStatusCode.BAD_REQUEST, -1);
+                    return;
+            }
+
+
+            final var requestJson = new GsonBuilder().disableHtmlEscaping().create().toJson(payload);
+
 
             final var response = lambdaClient.invoke(req -> req
-                    .functionName(requestURI.getPath().equals(RAYTRACER_PATH) ? raytracerArn : imageProcessorArn)
-                    .payload(payload)
+                    .functionName(functionName)
+                    .payload(SdkBytes.fromUtf8String(requestJson))
             );
 
             // TODO: Stream the response
             final var responseBody = response.payload().asByteArray();
 
-//            final var result2 = new String(responseBody).lines().collect(Collectors.joining("\n"));
-//            final var resultSplits2 = result.split(",");
-//            final var format = resultSplits[0].split("/")[1].split(";")[0];
-//
-//            String output = handleRequest(resultSplits[1], format);
-//            output = String.format("data:image/%s;base64,%s", format, output);
-//            exchange.sendResponseHeaders(response.statusCode(), responseBody.length);
+            final var responseBodyStr = new String(responseBody);
+
+            final var output = String.format("data:image/%s;base64,%s", outputFormat, responseBodyStr.substring(1, responseBodyStr.length() - 1));
+
+            exchange.sendResponseHeaders(response.statusCode(), output.getBytes().length);
 
             try (var os = exchange.getResponseBody()) {
-                os.write(responseBody);
+                os.write(output.getBytes());
             }
 
 
@@ -191,16 +218,41 @@ public class LoadBalancerHandler implements HttpHandler {
         }
     }
 
-    private static SdkBytes encodeImage(final byte[] requestBody) {
+    private Map<String, String> encodeRaytracerLambdaRequest(final byte[] requestBody, final Map<String, String> parameters) throws IOException {
+        final Map<String, String> requestPayload = new HashMap<>(parameters);
+
+        Map<String, Object> body = mapper.readValue(requestBody, new TypeReference<>() {
+        });
+
+        byte[] input = ((String) body.get("scene")).getBytes();
+        byte[] texmap = null;
+        if (body.containsKey("texmap")) {
+            // Convert ArrayList<Integer> to byte[]
+            ArrayList<Integer> texmapBytes = (ArrayList<Integer>) body.get("texmap");
+            texmap = new byte[texmapBytes.size()];
+            for (int i = 0; i < texmapBytes.size(); i++) {
+                texmap[i] = texmapBytes.get(i).byteValue();
+            }
+        }
+
+        requestPayload.put("input", Base64.getEncoder().encodeToString(input));
+        if (texmap != null)
+            requestPayload.put("texmap", Base64.getEncoder().encodeToString(texmap));
+
+        return requestPayload;
+    }
+
+    private static Map<String, String> encodeImageProcLambdaRequest(final byte[] requestBody) {
         Map<String, String> requestPayload = new HashMap<>();
         String result = new String(requestBody).lines().collect(Collectors.joining("\n"));
         String[] resultSplits = result.split(",");
 
-        requestPayload.put("fileFormat", resultSplits[0]);
+        final var format = resultSplits[0].split("/")[1].split(";")[0];
+
+        requestPayload.put("fileFormat", format);
         requestPayload.put("body", resultSplits[1]);
 
-
-        return SdkBytes.fromUtf8String(new Gson().toJson(requestPayload));
+        return requestPayload;
     }
 
     /**
