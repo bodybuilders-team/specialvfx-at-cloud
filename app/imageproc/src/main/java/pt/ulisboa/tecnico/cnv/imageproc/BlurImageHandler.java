@@ -8,6 +8,7 @@ import boofcv.struct.image.ImageType;
 import boofcv.struct.image.Planar;
 
 import java.awt.image.BufferedImage;
+import java.util.HashMap;
 
 public class BlurImageHandler extends ImageProcessingHandler {
 
@@ -24,6 +25,7 @@ public class BlurImageHandler extends ImageProcessingHandler {
         ImageProcessingRequest request = new ImageProcessingRequest(bufferedInput);
         BufferedImage bufferedOutput = new BlurImageHandler().process(request);
         UtilImageIO.saveImage(bufferedOutput, outputImagePath);
+
     }
 
     public BufferedImage process(ImageProcessingRequest request) {

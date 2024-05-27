@@ -18,8 +18,6 @@ import software.amazon.awssdk.services.lambda.LambdaClient;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 /**
@@ -31,11 +29,6 @@ public class LoadAndScaleWebServer {
     private static final Logger logger = Logger.getLogger(LoadAndScaleWebServer.class.getName());
 
     public static void main(String[] args) throws IOException {
-        if (args.length != 2) {
-            System.out.println("Usage: LoadAndScaleManager <imageProcessorArn> <raytracerArn>");
-            System.exit(1);
-        }
-
         final HttpServer server = HttpServer.create(new InetSocketAddress(PORT), 0);
         server.setExecutor(java.util.concurrent.Executors.newCachedThreadPool());
 
@@ -53,35 +46,26 @@ public class LoadAndScaleWebServer {
                 .credentialsProvider(EnvironmentVariableCredentialsProvider.create())
                 .build();
 
-        // Get all instances of the VM workers
-        final Map<String, VMWorkerInfo> vmWorkersInfo = new ConcurrentHashMap<>();
-        final var instances = AwsUtils.getInstances(ec2Client);
+        VMWorkersMonitor vmWorkersMonitor = new VMWorkersMonitor();
+        final var instancesData = AwsUtils.getRunningInstances(ec2Client);
 
-        logger.info("Found " + instances.size() + " instances");
-        for (var instance : instances) {
-            vmWorkersInfo.put(instance.instanceId(), new VMWorkerInfo(instance));
+        logger.info("Found " + instancesData.size() + " instances");
+        for (var instance : instancesData) {
+            final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.RUNNING);
+            vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
             logger.info("Instance " + instance.instanceId() + " added");
         }
 
-        if (vmWorkersInfo.isEmpty()) {
-            logger.info("No instances found, launching a new one");
-            final var instance = AwsUtils.launchInstance(ec2Client);
-            ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instance.instanceId()));
-            vmWorkersInfo.put(instance.instanceId(), new VMWorkerInfo(instance));
-        }
-
         // Start the auto scaler
-        AutoScaler autoScaler = new AutoScaler(vmWorkersInfo);
+        AutoScaler autoScaler = new AutoScaler(vmWorkersMonitor);
         autoScaler.start();
 
         server.createContext("/", new LoadBalancerHandler(
-                vmWorkersInfo,
+                vmWorkersMonitor,
                 raytracerRequestMetricRepository,
                 imageProcessorRequestMetricRepository,
                 ec2Client,
-                lambdaClient,
-                /*imageProcessorArn=*/args[0],
-                /*raytracerArn=*/args[1]
+                lambdaClient
         ));
 
         // Health check endpoint

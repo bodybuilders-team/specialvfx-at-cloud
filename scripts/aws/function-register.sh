@@ -1,7 +1,7 @@
 #!/bin/bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
-source $SCRIPT_DIR/config.sh
+source "$SCRIPT_DIR"/config.sh
 
 echo "Creating role for lambda functions..."
 aws iam create-role \
@@ -20,13 +20,22 @@ sleep 5
 # Create lambda function for imageproc
 echo "Creating lambda for imageproc..."
 aws lambda create-function \
-	--function-name imageproc-lambda \
+	--function-name blur-lambda \
 	--zip-file fileb://../../app/imageproc/target/imageproc-1.0.0-SNAPSHOT-jar-with-dependencies.jar \
-	--handler pt.ulisboa.tecnico.cnv.imageproc.ImageProcessingHandler \
+	--handler pt.ulisboa.tecnico.cnv.imageproc.BlurImageHandler \
 	--runtime java17 \
-	--timeout 5 \
+	--timeout 300 \
 	--memory-size 256 \
-	--role arn:aws:iam::$AWS_ACCOUNT_ID:role/lambda-role | jq -r '.FunctionArn' > imageproc-lambda-arn
+	--role arn:aws:iam::$AWS_ACCOUNT_ID:role/lambda-role | jq -r '.FunctionArn' > blur-lambda-arn
+
+aws lambda create-function \
+	--function-name enhance-lambda \
+	--zip-file fileb://../../app/imageproc/target/imageproc-1.0.0-SNAPSHOT-jar-with-dependencies.jar \
+	--handler pt.ulisboa.tecnico.cnv.imageproc.EnhanceImageHandler \
+	--runtime java17 \
+	--timeout 300 \
+	--memory-size 256 \
+	--role arn:aws:iam::$AWS_ACCOUNT_ID:role/lambda-role | jq -r '.FunctionArn' > enhance-lambda-arn
 
 # Create lambda function for raytracer
 echo "Creating lambda for raytracer..."
@@ -35,7 +44,7 @@ aws lambda create-function \
   --zip-file fileb://../../app/raytracer/target/raytracer-1.0.0-SNAPSHOT-jar-with-dependencies.jar \
   --handler pt.ulisboa.tecnico.cnv.raytracer.RaytracerHandler \
   --runtime java17 \
-  --timeout 5 \
+	--timeout 300 \
   --memory-size 256 \
   --role arn:aws:iam::$AWS_ACCOUNT_ID:role/lambda-role | jq -r '.FunctionArn' > raytracer-lambda-arn
 

@@ -12,6 +12,6 @@ echo "Creating image of the worker..."
 
 # Deploy load balancer and auto scaler.
 echo "Deploying load balancer and auto scaler..."
-"$SCRIPT_DIR"/launch-lb.sh
+"$SCRIPT_DIR"/launch-system.sh
 
 echo "SpecialVFX@Cloud deployed."

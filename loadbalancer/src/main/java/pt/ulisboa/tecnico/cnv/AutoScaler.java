@@ -4,95 +4,167 @@ import pt.ulisboa.tecnico.cnv.utils.AwsUtils;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
+import software.amazon.awssdk.services.ec2.model.Instance;
+import software.amazon.awssdk.services.ec2.model.InstanceStateName;
 
 import java.util.Comparator;
 import java.util.Map;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.logging.Logger;
 
 public class AutoScaler {
-
-    private final Map<String, VMWorkerInfo> instanceInfoMap;
-    private final ReentrantLock monitor = new ReentrantLock();
-    private final Condition condition = monitor.newCondition();
-    private final Region region = Region.EU_WEST_3;
+    public static final long DEFAULT_WORK_RAYTRACER = 500000000;
+    public static final long DEFAULT_WORK_IMAGE_PROCESSOR = 430000000;
+    public static final long COMPLEX_REQUEST_THRESHOLD = DEFAULT_WORK_RAYTRACER * 2;
+    public static final long MAX_WORKLOAD = DEFAULT_WORK_RAYTRACER * 5;
+    public static final double WORKERS_UNDERLOADED_THRESHOLD = 0.3 * MAX_WORKLOAD;
+    public static final double WORKERS_OVERLOADED_THRESHOLD = 0.7 * MAX_WORKLOAD;
+    private static final Region region = Region.EU_WEST_3;
+    private final VMWorkersMonitor vmWorkersMonitor;
     private final CloudWatchClient cloudWatchClient = CloudWatchClient.builder().region(region).build();
     private final Ec2Client ec2Client = Ec2Client.builder().region(region).build();
 
+    private final Logger logger = Logger.getLogger(AutoScaler.class.getName());
 
-    public AutoScaler(final Map<String, VMWorkerInfo> instanceInfoMap) {
-        this.instanceInfoMap = instanceInfoMap;
+
+    public AutoScaler(final VMWorkersMonitor instances) {
+        this.vmWorkersMonitor = instances;
     }
 
+    /**
+     * Starts the auto scaler, which will monitor the server load and scale up or down the number of instances.
+     * The auto scaler will also terminate instances that are marked for termination and have no requests.
+     */
     public void start() {
-        // Monitor the server load
+        logger.info("Starting auto scaler");
         new Thread(() -> {
-            monitor.lock();
             try {
                 while (true) {
-                    monitor();
+                    vmWorkersMonitor.lock();
+                    monitorInstances();
+                    terminateMarkedInstances();
+                    vmWorkersMonitor.unlock();
+                    Thread.sleep(5000);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
                 e.printStackTrace();
-            } finally {
-                monitor.unlock();
             }
         }).start();
 
-        //TODO: Temporary, remove after notifying in the loadbalancer
-        // Notify the monitor to check the server load
-        new Thread(() -> {
-            try {
-                while (true) {
-                    Thread.sleep(1000);
-
-                    monitor.lock();
-                    condition.signalAll();
-                    monitor.unlock();
-                }
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                monitor.unlock();
-            }
-        }).start();
     }
 
-    private void monitor() throws InterruptedException {
-        condition.await();
+    /**
+     * Monitors the instances and scales up or down the number of instances if needed.
+     */
+    private void monitorInstances() {
+        final var instances = vmWorkersMonitor.getVmWorkers();
 
-        // Monitor the server load from cloudwatch
-        for (var instance : instanceInfoMap.values()) {
-            final var instanceId = instance.getInstance().instanceId();
+        logger.info("Monitoring " + instances.size() + " instances");
+        updateInstances(instances);
 
-            final var cpuUsage = AwsUtils.getCpuUsage(cloudWatchClient, instanceId);
-            instance.setCpuUsage(cpuUsage);
-        }
+        if (instances.isEmpty())
+            return;
 
-        // Check if we need to scale up or down
-        final var averageCpuUsage = instanceInfoMap.values().stream()
-                .mapToDouble(VMWorkerInfo::getCpuUsage)
+        // Updates the CPU usage of the instances
+        AwsUtils.getCpuUsage(cloudWatchClient, instances.keySet().stream().toList())
+                .forEach((instanceId, cpuUsage) -> instances.get(instanceId).setCpuUsage(cpuUsage));
+
+        final var averageWork = instances.values().stream()
+                .filter(VMWorker::isRunning)
+                .mapToDouble(VMWorker::getWork)
                 .average()
                 .orElse(0);
 
-        System.out.println("averageCpuUsage = " + averageCpuUsage);
-        if (averageCpuUsage > 60) {
-            final var instance = AwsUtils.launchInstance(ec2Client);
-            ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instance.instanceId()));
-            instanceInfoMap.put(instance.instanceId(), new VMWorkerInfo(instance));
-        } else if (averageCpuUsage < 30 && instanceInfoMap.size() > 1) {
-            instanceInfoMap.values().stream()
-                    .min(Comparator.comparingDouble(VMWorkerInfo::getCpuUsage))
-                    .ifPresent(instance -> {
-                                //TODO, only delete after every request has been processed
-                                instanceInfoMap.remove(instance.getInstance().instanceId());
-                                AwsUtils.deleteInstance(ec2Client, instance.getInstance().instanceId());
-                            }
-                    );
+        final var averageCpuUsage = instances.values().stream()
+                .filter(VMWorker::isRunning)
+                .mapToDouble(VMWorker::getCpuUsage)
+                .average()
+                .orElse(0);
+
+        logger.info("Average work: " + averageWork + " Average CPU usage: " + averageCpuUsage + " Instances: " + instances.size());
+
+        if (needToScaleUp(averageWork))
+            scaleUp();
+        else if (needToScaleDown(averageWork, instances, averageCpuUsage))
+            markInstanceForScaleDown(instances);
+    }
+
+
+    private boolean needToScaleUp(double averageWork) {
+        return averageWork > WORKERS_OVERLOADED_THRESHOLD && !vmWorkersMonitor.anyVmWorkerInitializing();
+    }
+
+    private void scaleUp() {
+        logger.info("VM workers are overloaded and none is initializing, scaling up");
+
+        final var instance = AwsUtils.launchInstance(ec2Client);
+        final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.INITIALIZING);
+        vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
+    }
+
+
+    private static boolean needToScaleDown(double averageWork, Map<String, VMWorker> instances, double averageCpuUsage) {
+        return (averageWork < WORKERS_UNDERLOADED_THRESHOLD && !instances.isEmpty()) || (instances.size() == 1 && averageCpuUsage < 50);
+    }
+
+    private void markInstanceForScaleDown(Map<String, VMWorker> instances) {
+        instances.values().stream()
+                .filter(vmWorker -> !vmWorker.isFresh())
+                .min(Comparator.comparingDouble(VMWorker::getWork))
+                .ifPresent(vmWorker -> {
+                    logger.info("VM workers are underloaded, scaling down");
+                    vmWorker.markForTermination();
+                });
+    }
+
+    private void updateInstances(final Map<String, VMWorker> instances) {
+        final var awsInstances = AwsUtils.getInstances(ec2Client);
+
+        final var runningInstances = awsInstances.stream()
+                .filter(i -> i.state().name().equals(InstanceStateName.RUNNING))
+                .toList();
+
+        final var activeInstances = awsInstances.stream()
+                .filter(i -> !i.state().name().equals(InstanceStateName.RUNNING) || !i.state().name().equals(InstanceStateName.PENDING))
+                .map(Instance::instanceId)
+                .toList();
+
+        // Check if the instances are still running
+        for (var instance : instances.values()) {
+            if (!activeInstances.contains(instance.getInstance().instanceId())) {
+                logger.severe("Instance " + instance.getInstance().instanceId() + " is not running, removing it.");
+                instances.remove(instance.getInstance().instanceId());
+            }
+        }
+
+        // Check if the instances are initialized
+        for (var instance : instances.values()) {
+            if (!instance.isRunning()) {
+                // Get the instance data
+                final var instanceId = instance.getInstance().instanceId();
+                final var newInstance = runningInstances.stream().filter(i -> i.instanceId().equals(instanceId)).findFirst();
+
+                if (newInstance.isEmpty())
+                    continue;
+
+                logger.info("Instance " + instanceId + " is now running, updating it.");
+
+                instance.setInstance(newInstance.get());
+                instance.setRunning();
+            }
+        }
+    }
+
+    /**
+     * Terminates instances that are marked for termination and has no requests.
+     */
+    private void terminateMarkedInstances() {
+        for (var instance : vmWorkersMonitor.getVmWorkers().values()) {
+            if (instance.isTerminating() && instance.getNumRequests() == 0) {
+                vmWorkersMonitor.getVmWorkers().remove(instance.getInstance().instanceId());
+                AwsUtils.deleteInstance(ec2Client, instance.getInstance().instanceId());
+            }
         }
     }
 }
