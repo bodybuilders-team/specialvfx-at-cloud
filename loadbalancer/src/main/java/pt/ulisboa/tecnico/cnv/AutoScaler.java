@@ -6,8 +6,10 @@ import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.Instance;
+import software.amazon.awssdk.services.ec2.model.InstanceStateName;
 
 import java.util.Comparator;
+import java.util.Map;
 import java.util.logging.Logger;
 
 public class AutoScaler {
@@ -41,7 +43,7 @@ public class AutoScaler {
                 while (true) {
                     monitorInstances();
                     terminateMarkedInstances();
-                    Thread.sleep(2000);
+                    Thread.sleep(5000);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
@@ -57,19 +59,23 @@ public class AutoScaler {
      */
     private void monitorInstances() {
         final var instances = vmWorkersMonitor.getVmWorkers();
+
+
         logger.info("Monitoring " + instances.size() + " instances");
+        updateInstances(instances);
+
         // Updates the CPU usage of the instances
         AwsUtils.getCpuUsage(cloudWatchClient, instances.keySet().stream().toList())
                 .forEach((instanceId, cpuUsage) -> instances.get(instanceId).setCpuUsage(cpuUsage));
 
         final var averageWork = instances.values().stream()
-                .filter(vm -> !vm.isTerminating() && !vm.isInitialized())
+                .filter(vm -> !vm.isTerminating() && vm.isInitialized())
                 .mapToDouble(VMWorker::getWork)
                 .average()
                 .orElse(0);
 
         final var averageCpuUsage = instances.values().stream()
-                .filter(vm -> !vm.isTerminating() && !vm.isInitialized())
+                .filter(vm -> !vm.isTerminating() && vm.isInitialized())
                 .mapToDouble(VMWorker::getCpuUsage)
                 .average()
                 .orElse(0);
@@ -78,23 +84,55 @@ public class AutoScaler {
 
         // Check if we need to scale up, down or do nothing
         if (averageWork > 0.7 * MAX_WORKLOAD) {
-            Instance instance;
-            VMWorker vmWorker;
-
-            synchronized (vmWorkersMonitor) {
-                instance = AwsUtils.launchInstance(ec2Client);
-                vmWorker = new VMWorker(instance);
-                vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
-            }
-
-            instance = AwsUtils.waitForInstance(ec2Client, instance.instanceId());
-            vmWorker.setInstance(instance);
-            vmWorker.setInitialized(true);
+//            logger.info("Scaling up");
+//
+//            final var instance = AwsUtils.launchInstance(ec2Client);
+//            final var vmWorker = new VMWorker(instance);
+//            vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
         } else if (averageWork < 0.3 * MAX_WORKLOAD && instances.size() > 1) {
+            logger.info("Scaling down");
             instances.values().stream()
-                    .filter(vm -> !vm.isTerminating() && !vm.isInitialized())
+                    .filter(vm -> !vm.isTerminating() && vm.isInitialized())
                     .min(Comparator.comparingDouble(VMWorker::getCpuUsage))
                     .ifPresent(VMWorker::markForTermination);
+        }
+    }
+
+    private void updateInstances(final Map<String, VMWorker> instances) {
+        final var awsInstances = AwsUtils.getInstances(ec2Client);
+
+        final var runningInstances = awsInstances.stream()
+                .filter(i -> i.state().name().equals(InstanceStateName.RUNNING))
+                .toList();
+
+        final var activeInstances = awsInstances.stream()
+                .filter(i -> !i.state().name().equals(InstanceStateName.RUNNING) || !i.state().name().equals(InstanceStateName.PENDING))
+                .map(Instance::instanceId)
+                .toList();
+
+        // Check if the instances are still running
+        for (var instance : instances.values()) {
+            if (!activeInstances.contains(instance.getInstance().instanceId())) {
+                logger.severe("Instance " + instance.getInstance().instanceId() + " is not running, removing it.");
+                instances.remove(instance.getInstance().instanceId());
+            }
+        }
+
+        // Check if the instances are initialized
+        for (var instance : instances.values()) {
+            if (!instance.isInitialized()) {
+                // Get the instance data
+                final var instanceId = instance.getInstance().instanceId();
+                final var newInstance = runningInstances.stream().filter(i -> i.instanceId().equals(instanceId)).findFirst();
+
+                if (newInstance.isEmpty())
+                    continue;
+
+                logger.info("Instance " + instanceId + " is now running, updating it.");
+
+                instance.setInstance(newInstance.get());
+                instance.setInitialized(true);
+            }
         }
     }
 

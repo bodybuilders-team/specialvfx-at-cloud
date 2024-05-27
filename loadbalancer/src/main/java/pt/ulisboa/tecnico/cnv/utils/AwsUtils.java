@@ -131,13 +131,23 @@ public class AwsUtils {
      * @param ec2Client the ec2 client
      * @return the list of instances
      */
-    public static List<Instance> getInstances(final Ec2Client ec2Client) { // TODO get only our instances
+    public static List<Instance> getRunningInstances(final Ec2Client ec2Client) { // TODO get only our instances
         DescribeInstancesRequest request = DescribeInstancesRequest.builder().build();
         DescribeInstancesResponse response = ec2Client.describeInstances(request);
 
         return response.reservations().stream()
                 .flatMap(r -> r.instances().stream())
                 .filter(i -> i.state().name().equals(InstanceStateName.RUNNING))
+                .filter(i -> i.imageId() != null && i.imageId().equals(AWS_IMAGE_ID))
+                .toList();
+    }
+
+    public static List<Instance> getInstances(final Ec2Client ec2Client) { // TODO get only our instances
+        DescribeInstancesRequest request = DescribeInstancesRequest.builder().build();
+        DescribeInstancesResponse response = ec2Client.describeInstances(request);
+
+        return response.reservations().stream()
+                .flatMap(r -> r.instances().stream())
                 .filter(i -> i.imageId() != null && i.imageId().equals(AWS_IMAGE_ID))
                 .toList();
     }
@@ -154,6 +164,12 @@ public class AwsUtils {
         if (instance.isEmpty()) {
             logger.severe("Failed waiting for instance to be running");
             throw new RuntimeException("Failed waiting for instance to be running");
+        }
+
+        try {
+            Thread.sleep(2000); // Wait for the instance to be ready
+        } catch (InterruptedException e) {
+            e.printStackTrace();
         }
 
         return instance.get();

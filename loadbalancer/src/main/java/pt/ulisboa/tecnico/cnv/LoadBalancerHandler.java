@@ -109,6 +109,8 @@ public class LoadBalancerHandler implements HttpHandler {
                     .filter(vm -> !vm.isInitialized())
                     .findAny();
 
+            logger.info("Initializing VM worker: " + initializingVmWorkerOpt.map(vm -> vm.getInstance().instanceId()).orElse("none"));
+
             if (requestWork > COMPLEX_REQUEST_THRESHOLD) {
                 logger.info("Complex request, redirecting to a vm worker");
                 if (initializingVmWorkerOpt.isPresent()) {

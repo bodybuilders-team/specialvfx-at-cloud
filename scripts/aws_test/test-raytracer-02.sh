@@ -54,8 +54,8 @@ function complex {
 
 # Run 100 requests concurrently and repeat 500 times
 for ((i = 0; i < 50000; i++)); do
-    for ((j = 0; j < 1; j++)); do
-        complex &
+    for ((j = 0; j < 3; j++)); do
+        simple &
     done
     sleep 3
 done

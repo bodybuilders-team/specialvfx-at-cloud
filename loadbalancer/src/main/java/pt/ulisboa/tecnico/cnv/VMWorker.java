@@ -7,11 +7,11 @@ import software.amazon.awssdk.services.ec2.model.Instance;
  */
 public class VMWorker {
     private Instance instance;
-    private double cpuUsage = 0;
-    private long work = 0;
-    private int numRequests = 0;
-    private boolean terminating = false;
-    private boolean initialized = false;
+    private volatile double cpuUsage = 0;
+    private volatile long work = 0;
+    private volatile int numRequests = 0;
+    private volatile boolean terminating = false;
+    private volatile boolean initialized = false;
 
     public VMWorker(final Instance instance) {
         this.instance = instance;

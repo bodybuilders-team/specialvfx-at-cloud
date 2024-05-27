@@ -44,11 +44,12 @@ public class LoadAndScaleWebServer {
 
 //        // Get all instances of the VM workers
         VMWorkersMonitor VMWorkersMonitor = new VMWorkersMonitor();
-        final var instancesData = AwsUtils.getInstances(ec2Client);
+        final var instancesData = AwsUtils.getRunningInstances(ec2Client);
 
         logger.info("Found " + instancesData.size() + " instances");
         for (var instance : instancesData) {
             final var vmWorker = new VMWorker(instance);
+            vmWorker.setInitialized(true);
             VMWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
             logger.info("Instance " + instance.instanceId() + " added");
         }
@@ -57,6 +58,7 @@ public class LoadAndScaleWebServer {
             logger.info("No instances found, launching a new one");
             final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
             final var vmWorker = new VMWorker(instance);
+            vmWorker.setInitialized(true);
             VMWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
             logger.info("Instance " + instance.instanceId() + " added");
         }
