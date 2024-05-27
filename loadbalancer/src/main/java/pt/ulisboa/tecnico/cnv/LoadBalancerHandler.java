@@ -93,20 +93,22 @@ public class LoadBalancerHandler implements HttpHandler {
             final var requestWork = estimateComplexity(requestURI, requestBody);
             logger.info("Received request for " + requestURI + " with complexity " + requestWork);
 
+            vmWorkersMonitor.lock();
             final var vmWorkerWithLeastWork = vmWorkersMonitor.getVmWorkers().values().stream()
-                    .filter(vmWorker -> !vmWorker.isTerminating() && vmWorker.isInitialized())
+                    .filter(VMWorker::isRunning)
                     .filter(vmWorker -> MAX_WORKLOAD - vmWorker.getWork() > requestWork || vmWorker.getNumRequests() == 0)
                     .min(Comparator.comparingDouble(VMWorker::getWork));
 
             // TODO: Add fault tolerance when for example we redirect to a terminating instance or smthg like that.
             if (vmWorkerWithLeastWork.isPresent()) {
                 logger.info("Redirecting to VM worker: " + vmWorkerWithLeastWork.get().getInstance().instanceId());
+                vmWorkersMonitor.unlock();
                 redirectToVMWorker(exchange, vmWorkerWithLeastWork.get(), requestURI, requestWork, requestBody);
                 return;
             }
 
             final var initializingVmWorkerOpt = vmWorkersMonitor.getVmWorkers().values().stream()
-                    .filter(vm -> !vm.isInitialized())
+                    .filter(VMWorker::isInitializing)
                     .findAny();
 
             logger.info("Initializing VM worker: " + initializingVmWorkerOpt.map(vm -> vm.getInstance().instanceId()).orElse("none"));
@@ -116,10 +118,11 @@ public class LoadBalancerHandler implements HttpHandler {
                 if (initializingVmWorkerOpt.isPresent()) {
                     logger.info("An instance is initializing, waiting for it to be ready");
                     var initializingVmWorker = initializingVmWorkerOpt.get();
+                    vmWorkersMonitor.unlock();
                     final var instance = AwsUtils.waitForInstance(ec2Client, initializingVmWorker.getInstance().instanceId());
 
                     initializingVmWorker.setInstance(instance);
-                    initializingVmWorker.setInitialized(true);
+                    initializingVmWorker.setRunning();
 
                     redirectToVMWorker(exchange, initializingVmWorker, requestURI, requestWork, requestBody);
                 } else {
@@ -127,15 +130,14 @@ public class LoadBalancerHandler implements HttpHandler {
                     Instance instance;
                     VMWorker vmWorker;
 
-                    synchronized (vmWorkersMonitor) {
-                        instance = AwsUtils.launchInstance(ec2Client);
-                        vmWorker = new VMWorker(instance);
-                        vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
-                    }
+                    instance = AwsUtils.launchInstance(ec2Client);
+                    vmWorker = new VMWorker(instance, VMWorker.WorkerState.INITIALIZING);
+                    vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
 
+                    vmWorkersMonitor.unlock();
                     instance = AwsUtils.waitForInstance(ec2Client, instance.instanceId());
                     vmWorker.setInstance(instance);
-                    vmWorker.setInitialized(true);
+                    vmWorker.setRunning();
 
                     redirectToVMWorker(exchange, vmWorker, requestURI, requestWork, requestBody);
                 }
@@ -143,13 +145,12 @@ public class LoadBalancerHandler implements HttpHandler {
                 logger.info("Simple request, redirecting to a lambda worker");
                 if (initializingVmWorkerOpt.isEmpty()) {
                     logger.info("Launching a new instance to handle requests in a near future");
-                    synchronized (vmWorkersMonitor) {
-                        final var instance = AwsUtils.launchInstance(ec2Client);
-                        final var vmWorker = new VMWorker(instance);
-                        vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
-                    }
+                    final var instance = AwsUtils.launchInstance(ec2Client);
+                    final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.INITIALIZING);
+                    vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
                 }
 
+                vmWorkersMonitor.unlock();
                 redirectToLambdaWorker(exchange, requestURI, requestBody);
             }
         } catch (Exception e) {
@@ -175,7 +176,9 @@ public class LoadBalancerHandler implements HttpHandler {
     ) throws URISyntaxException, IOException {
         final var instanceUri = new URI("http://" + instance.getInstance().publicDnsName() + ":" + PORT + requestURI);
 
+        vmWorkersMonitor.lock();
         vmWorkersMonitor.addWork(instance, requestComplexity);
+        vmWorkersMonitor.unlock();
         try {
             final var connection = (HttpURLConnection) instanceUri.toURL().openConnection();
 
@@ -204,7 +207,9 @@ public class LoadBalancerHandler implements HttpHandler {
 
             connection.disconnect();
         } finally {
+            vmWorkersMonitor.lock();
             vmWorkersMonitor.removeWork(instance, requestComplexity);
+            vmWorkersMonitor.unlock();
         }
     }
 

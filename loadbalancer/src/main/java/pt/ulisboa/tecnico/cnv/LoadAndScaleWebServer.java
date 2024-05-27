@@ -42,33 +42,30 @@ public class LoadAndScaleWebServer {
                 .credentialsProvider(EnvironmentVariableCredentialsProvider.create())
                 .build();
 
-//        // Get all instances of the VM workers
-        VMWorkersMonitor VMWorkersMonitor = new VMWorkersMonitor();
+        VMWorkersMonitor vmWorkersMonitor = new VMWorkersMonitor();
         final var instancesData = AwsUtils.getRunningInstances(ec2Client);
 
         logger.info("Found " + instancesData.size() + " instances");
         for (var instance : instancesData) {
-            final var vmWorker = new VMWorker(instance);
-            vmWorker.setInitialized(true);
-            VMWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
+            final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.RUNNING);
+            vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
             logger.info("Instance " + instance.instanceId() + " added");
         }
 
-        if (VMWorkersMonitor.getVmWorkers().isEmpty()) {
+        /*if (vmWorkersMonitor.getVmWorkers().isEmpty()) {
             logger.info("No instances found, launching a new one");
             final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
-            final var vmWorker = new VMWorker(instance);
-            vmWorker.setInitialized(true);
-            VMWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
+            final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.RUNNING);
+            vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
             logger.info("Instance " + instance.instanceId() + " added");
-        }
+        }*/
 
         // Start the auto scaler
-        AutoScaler autoScaler = new AutoScaler(VMWorkersMonitor);
+        AutoScaler autoScaler = new AutoScaler(vmWorkersMonitor);
         autoScaler.start();
 
         server.createContext("/", new LoadBalancerHandler(
-                VMWorkersMonitor,
+                vmWorkersMonitor,
                 raytracerRequestMetricRepository,
                 imageProcessorRequestMetricRepository,
                 ec2Client,

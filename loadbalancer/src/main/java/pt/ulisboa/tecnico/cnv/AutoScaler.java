@@ -1,6 +1,5 @@
 package pt.ulisboa.tecnico.cnv;
 
-import org.slf4j.LoggerFactory;
 import pt.ulisboa.tecnico.cnv.utils.AwsUtils;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
@@ -17,7 +16,8 @@ public class AutoScaler {
     public static final long DEFAULT_WORK_IMAGE_PROCESSOR = 430000000;
     public static final long COMPLEX_REQUEST_THRESHOLD = DEFAULT_WORK_RAYTRACER * 2;
     public static final long MAX_WORKLOAD = DEFAULT_WORK_RAYTRACER * 5;
-    private static final org.slf4j.Logger log = LoggerFactory.getLogger(AutoScaler.class);
+    public static final double WORKERS_UNDERLOADED_THRESHOLD = 0.3 * MAX_WORKLOAD;
+    public static final double WORKERS_OVERLOADED_THRESHOLD = 0.7 * MAX_WORKLOAD;
 
     private final VMWorkersMonitor vmWorkersMonitor;
 
@@ -41,8 +41,10 @@ public class AutoScaler {
         new Thread(() -> {
             try {
                 while (true) {
+                    vmWorkersMonitor.lock();
                     monitorInstances();
                     terminateMarkedInstances();
+                    vmWorkersMonitor.unlock();
                     Thread.sleep(5000);
                 }
             } catch (InterruptedException e) {
@@ -60,7 +62,6 @@ public class AutoScaler {
     private void monitorInstances() {
         final var instances = vmWorkersMonitor.getVmWorkers();
 
-
         logger.info("Monitoring " + instances.size() + " instances");
         updateInstances(instances);
 
@@ -69,13 +70,13 @@ public class AutoScaler {
                 .forEach((instanceId, cpuUsage) -> instances.get(instanceId).setCpuUsage(cpuUsage));
 
         final var averageWork = instances.values().stream()
-                .filter(vm -> !vm.isTerminating() && vm.isInitialized())
+                .filter(VMWorker::isRunning)
                 .mapToDouble(VMWorker::getWork)
                 .average()
                 .orElse(0);
 
         final var averageCpuUsage = instances.values().stream()
-                .filter(vm -> !vm.isTerminating() && vm.isInitialized())
+                .filter(VMWorker::isRunning)
                 .mapToDouble(VMWorker::getCpuUsage)
                 .average()
                 .orElse(0);
@@ -83,17 +84,17 @@ public class AutoScaler {
         logger.info("Average work: " + averageWork + " Average CPU usage: " + averageCpuUsage + " Instances: " + instances.size());
 
         // Check if we need to scale up, down or do nothing
-        if (averageWork > 0.7 * MAX_WORKLOAD) {
-//            logger.info("Scaling up");
-//
-//            final var instance = AwsUtils.launchInstance(ec2Client);
-//            final var vmWorker = new VMWorker(instance);
-//            vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
-        } else if (averageWork < 0.3 * MAX_WORKLOAD && instances.size() > 1) {
-            logger.info("Scaling down");
+        if (averageWork > WORKERS_OVERLOADED_THRESHOLD && !vmWorkersMonitor.anyVmWorkerInitializing()) {
+            logger.info("VM workers are overloaded and none is initializing, scaling up");
+
+            final var instance = AwsUtils.launchInstance(ec2Client);
+            final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.INITIALIZING);
+            vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
+        } else if (averageWork < WORKERS_UNDERLOADED_THRESHOLD && instances.size() > 1) {
+            logger.info("VM workers are underloaded, scaling down");
             instances.values().stream()
-                    .filter(vm -> !vm.isTerminating() && vm.isInitialized())
-                    .min(Comparator.comparingDouble(VMWorker::getCpuUsage))
+                    .filter(VMWorker::isRunning)
+                    .min(Comparator.comparingDouble(VMWorker::getCpuUsage)) // TODO: use work or cpu usage?
                     .ifPresent(VMWorker::markForTermination);
         }
     }
@@ -120,7 +121,7 @@ public class AutoScaler {
 
         // Check if the instances are initialized
         for (var instance : instances.values()) {
-            if (!instance.isInitialized()) {
+            if (!instance.isRunning()) {
                 // Get the instance data
                 final var instanceId = instance.getInstance().instanceId();
                 final var newInstance = runningInstances.stream().filter(i -> i.instanceId().equals(instanceId)).findFirst();
@@ -131,7 +132,7 @@ public class AutoScaler {
                 logger.info("Instance " + instanceId + " is now running, updating it.");
 
                 instance.setInstance(newInstance.get());
-                instance.setInitialized(true);
+                instance.setRunning();
             }
         }
     }

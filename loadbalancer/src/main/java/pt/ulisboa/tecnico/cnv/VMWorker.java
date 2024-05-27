@@ -10,11 +10,11 @@ public class VMWorker {
     private volatile double cpuUsage = 0;
     private volatile long work = 0;
     private volatile int numRequests = 0;
-    private volatile boolean terminating = false;
-    private volatile boolean initialized = false;
+    private volatile WorkerState state;
 
-    public VMWorker(final Instance instance) {
+    public VMWorker(final Instance instance, WorkerState state) {
         this.instance = instance;
+        this.state = state;
     }
 
     public synchronized void addWork(long work) {
@@ -34,11 +34,11 @@ public class VMWorker {
     }
 
     public synchronized void markForTermination() {
-        this.terminating = true;
+        this.state = WorkerState.TERMINATING;
     }
 
     public synchronized boolean isTerminating() {
-        return this.terminating;
+        return this.state == WorkerState.TERMINATING;
     }
 
     public synchronized void incrementRequests() {
@@ -54,7 +54,7 @@ public class VMWorker {
     }
 
     public synchronized double getCpuUsage() {
-        return cpuUsage;
+        return this.cpuUsage;
     }
 
     public synchronized void setCpuUsage(double cpuUsage) {
@@ -62,18 +62,28 @@ public class VMWorker {
     }
 
     public synchronized long getWork() {
-        return work;
+        return this.work;
     }
 
     public synchronized void setWork(long work) {
         this.work = work;
     }
 
-    public synchronized boolean isInitialized() {
-        return initialized;
+    public synchronized boolean isRunning() {
+        return this.state == WorkerState.RUNNING;
     }
 
-    public synchronized void setInitialized(boolean initialized) {
-        this.initialized = initialized;
+    public synchronized boolean isInitializing() {
+        return this.state == WorkerState.INITIALIZING;
+    }
+
+    public synchronized void setRunning() {
+        this.state = WorkerState.RUNNING;
+    }
+
+    enum WorkerState {
+        INITIALIZING,
+        RUNNING,
+        TERMINATING
     }
 }
