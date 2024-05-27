@@ -14,6 +14,7 @@ import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricRepo
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetric;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetricRepository;
 import pt.ulisboa.tecnico.cnv.utils.AwsUtils;
+import pt.ulisboa.tecnico.cnv.utils.CnvIOException;
 import pt.ulisboa.tecnico.cnv.utils.ExceptionUtils;
 import pt.ulisboa.tecnico.cnv.utils.Utils;
 import software.amazon.awssdk.core.SdkBytes;
@@ -21,6 +22,7 @@ import software.amazon.awssdk.http.HttpStatusCode;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.Instance;
 import software.amazon.awssdk.services.lambda.LambdaClient;
+import software.amazon.awssdk.services.lambda.model.TooManyRequestsException;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
@@ -43,23 +45,18 @@ import static pt.ulisboa.tecnico.cnv.AutoScaler.DEFAULT_WORK_RAYTRACER;
 import static pt.ulisboa.tecnico.cnv.AutoScaler.MAX_WORKLOAD;
 
 public class LoadBalancerHandler implements HttpHandler {
-    private static final double EPSILON = 1e-6;
-    private static final int PORT = 8000;
     public static final String RAYTRACER_PATH = "/raytracer";
     public static final String BLURIMAGE_PATH = "/blurimage";
     public static final String ENHANCEIMAGE_PATH = "/enhanceimage";
-
+    private static final double EPSILON = 1e-6;
+    private static final int PORT = 8000;
     private static final ObjectMapper mapper = new ObjectMapper();
-
+    private static final Logger logger = Logger.getLogger(LoadBalancerHandler.class.getName());
     private final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository;
     private final RaytracerRequestMetricRepository raytracerRequestMetricRepository;
     private final VMWorkersMonitor vmWorkersMonitor;
-
     private final Ec2Client ec2Client;
     private final LambdaClient lambdaClient;
-
-    private static final Logger logger = Logger.getLogger(LoadBalancerHandler.class.getName());
-
     private final String blurArn = System.getenv("BLUR_LAMBDA_ARN");
     private final String enhanceArn = System.getenv("ENHANCE_LAMBDA_ARN");
     private final String raytracerArn = System.getenv("RAYTRACER_LAMBDA_ARN");
@@ -93,75 +90,91 @@ public class LoadBalancerHandler implements HttpHandler {
             final var requestWork = estimateComplexity(requestURI, requestBody);
             logger.info("Received request for " + requestURI + " with complexity " + requestWork);
 
-            vmWorkersMonitor.lock();
-            final var vmWorkerWithLeastWork = vmWorkersMonitor.getVmWorkers().values().stream()
-                    .filter(VMWorker::isRunning)
-                    .filter(vmWorker -> MAX_WORKLOAD - vmWorker.getWork() > requestWork || vmWorker.getNumRequests() == 0)
-                    .min(Comparator.comparingDouble(VMWorker::getWork));
-
-            // TODO: Add fault tolerance when for example we redirect to a terminating instance or smthg like that.
-            if (vmWorkerWithLeastWork.isPresent()) {
-                logger.info("Redirecting to VM worker: " + vmWorkerWithLeastWork.get().getInstance().instanceId());
-                vmWorkersMonitor.unlock();
-                redirectToVMWorker(exchange, vmWorkerWithLeastWork.get(), requestURI, requestWork, requestBody);
-                return;
-            }
-
-            final var initializingVmWorkerOpt = vmWorkersMonitor.getVmWorkers().values().stream()
-                    .filter(VMWorker::isInitializing)
-                    .findAny();
-
-            logger.info("Initializing VM worker: " + initializingVmWorkerOpt.map(vm -> vm.getInstance().instanceId()).orElse("none"));
-
-            if (requestWork > COMPLEX_REQUEST_THRESHOLD) {
-                logger.info("Complex request, redirecting to a vm worker");
-                if (initializingVmWorkerOpt.isPresent()) {
-                    logger.info("An instance is initializing, waiting for it to be ready");
-                    var initializingVmWorker = initializingVmWorkerOpt.get();
-                    vmWorkersMonitor.unlock();
-                    final var instance = AwsUtils.waitForInstance(ec2Client, initializingVmWorker.getInstance().instanceId());
-
-                    initializingVmWorker.setInstance(instance);
-                    initializingVmWorker.setRunning();
-
-                    redirectToVMWorker(exchange, initializingVmWorker, requestURI, requestWork, requestBody);
-                } else {
-                    logger.info("Launching a new instance to handle the request");
-                    Instance instance;
-                    VMWorker vmWorker;
-
-                    instance = AwsUtils.launchInstance(ec2Client);
-                    vmWorker = new VMWorker(instance, VMWorker.WorkerState.INITIALIZING);
-                    vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
-
-                    vmWorkersMonitor.unlock();
-                    instance = AwsUtils.waitForInstance(ec2Client, instance.instanceId());
-                    vmWorker.setInstance(instance);
-                    vmWorker.setRunning();
-
-                    redirectToVMWorker(exchange, vmWorker, requestURI, requestWork, requestBody);
+            while (true) {
+                try {
+                    loadBalance(exchange, requestWork, requestURI, requestBody);
+                    break;
+                } catch (CnvIOException e) {
+                    logger.warning("Error while redirecting request to VM worker, retrying. Error: " + e.getMessage());
+                    Thread.sleep(1000);
+                } catch (TooManyRequestsException e) {
+                    logger.warning("Too many requests sent to lambda, retrying in 1 second");
+                    Thread.sleep(1000);
                 }
-            } else {
-                logger.info("Simple request, redirecting to a lambda worker");
-                if (initializingVmWorkerOpt.isEmpty()) {
-                    logger.info("Launching a new instance to handle requests in a near future");
-                    final var instance = AwsUtils.launchInstance(ec2Client);
-                    final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.INITIALIZING);
-                    vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
-                }
-
-                vmWorkersMonitor.unlock();
-                redirectToLambdaWorker(exchange, requestURI, requestBody);
             }
         } catch (Exception e) {
             logger.severe(ExceptionUtils.getStackTrace(e));
             exchange.sendResponseHeaders(HttpURLConnection.HTTP_INTERNAL_ERROR, -1);
         } finally {
-            logger.info("Closing exchange");
+            logger.info("Request finished, closing connection");
             exchange.close();
         }
     }
 
+    private void loadBalance(
+            HttpExchange exchange,
+            long requestWork,
+            URI requestURI,
+            byte[] requestBody
+    ) throws URISyntaxException, IOException, CnvIOException {
+        vmWorkersMonitor.lock();
+        final var vmWorkerWithLeastWork = vmWorkersMonitor.getVmWorkers().values().stream()
+                .filter(VMWorker::isRunning)
+                .filter(vmWorker -> MAX_WORKLOAD - vmWorker.getWork() > requestWork || vmWorker.getNumRequests() == 0)
+                .min(Comparator.comparingDouble(VMWorker::getWork));
+
+        // TODO: Add fault tolerance when for example we redirect to a terminating instance or smthg like that.
+        if (vmWorkerWithLeastWork.isPresent()) {
+            logger.info("Redirecting to VM worker: " + vmWorkerWithLeastWork.get().getInstance().instanceId());
+            vmWorkersMonitor.unlock();
+            redirectToVMWorker(exchange, vmWorkerWithLeastWork.get(), requestURI, requestWork, requestBody);
+            return;
+        }
+
+        final var initializingVmWorkerOpt = vmWorkersMonitor.getVmWorkers().values().stream()
+                .filter(VMWorker::isInitializing)
+                .findAny();
+
+        logger.info("Initializing VM worker: " + initializingVmWorkerOpt.map(vm -> vm.getInstance().instanceId()).orElse("none"));
+
+        if (requestWork > COMPLEX_REQUEST_THRESHOLD) {
+            logger.info("Complex request, redirecting to a vm worker");
+            if (initializingVmWorkerOpt.isPresent()) {
+                logger.info("An instance is initializing, waiting for it to be ready");
+                var initializingVmWorker = initializingVmWorkerOpt.get();
+                vmWorkersMonitor.unlock();
+                final var instance = AwsUtils.waitForInstance(ec2Client, initializingVmWorker.getInstance().instanceId());
+
+                initializingVmWorker.setInstance(instance);
+                initializingVmWorker.setRunning();
+
+                redirectToVMWorker(exchange, initializingVmWorker, requestURI, requestWork, requestBody);
+            } else {
+                logger.info("Launching a new instance to handle the request");
+                Instance instance = AwsUtils.launchInstance(ec2Client);
+                VMWorker vmWorker = new VMWorker(instance, VMWorker.WorkerState.INITIALIZING);
+                vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
+
+                vmWorkersMonitor.unlock();
+                instance = AwsUtils.waitForInstance(ec2Client, instance.instanceId());
+                vmWorker.setInstance(instance);
+                vmWorker.setRunning();
+
+                redirectToVMWorker(exchange, vmWorker, requestURI, requestWork, requestBody);
+            }
+        } else {
+            logger.info("Simple request, redirecting to a lambda worker");
+            if (initializingVmWorkerOpt.isEmpty()) {
+                logger.info("Launching a new instance to handle requests in a near future");
+                final var instance = AwsUtils.launchInstance(ec2Client);
+                final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.INITIALIZING);
+                vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
+            }
+
+            vmWorkersMonitor.unlock();
+            redirectToLambdaWorker(exchange, requestURI, requestBody);
+        }
+    }
 
     /**
      * Redirect the request to the instance that will process it.
@@ -173,24 +186,30 @@ public class LoadBalancerHandler implements HttpHandler {
             URI requestURI,
             long requestComplexity,
             byte[] requestBody
-    ) throws URISyntaxException, IOException {
+    ) throws URISyntaxException, IOException, CnvIOException {
         final var instanceUri = new URI("http://" + instance.getInstance().publicDnsName() + ":" + PORT + requestURI);
 
         vmWorkersMonitor.lock();
         vmWorkersMonitor.addWork(instance, requestComplexity);
         vmWorkersMonitor.unlock();
         try {
-            final var connection = (HttpURLConnection) instanceUri.toURL().openConnection();
+            HttpURLConnection connection;
+            try {
+                connection = (HttpURLConnection) instanceUri.toURL().openConnection();
 
-            connection.setRequestMethod(exchange.getRequestMethod());
-            exchange.getRequestHeaders().forEach((k, v) -> v.forEach(h -> connection.setRequestProperty(k, h)));
-            connection.setDoOutput(true);
+                connection.setRequestMethod(exchange.getRequestMethod());
+                exchange.getRequestHeaders().forEach((k, v) -> v.forEach(h -> connection.setRequestProperty(k, h)));
+                connection.setDoOutput(true);
 
-            try (var os = connection.getOutputStream()) {
-                os.write(requestBody);
+                try (var os = connection.getOutputStream()) {
+                    os.write(requestBody);
+                }
+
+                connection.connect();
+            } catch (IOException e) {
+                throw new CnvIOException("Error while redirecting request to VM worker");
             }
 
-            connection.connect();
             connection.getHeaderFields().forEach((k, v) -> {
                 if (k != null)
                     v.forEach(h -> exchange.getResponseHeaders().add(k, h));
@@ -212,7 +231,6 @@ public class LoadBalancerHandler implements HttpHandler {
             vmWorkersMonitor.unlock();
         }
     }
-
 
     /**
      * Redirect the request to a lambda worker, according to the request URI.
@@ -290,19 +308,6 @@ public class LoadBalancerHandler implements HttpHandler {
         requestPayload.put("input", Base64.getEncoder().encodeToString(input));
         if (texmap != null)
             requestPayload.put("texmap", Base64.getEncoder().encodeToString(texmap));
-
-        return requestPayload;
-    }
-
-    private static Map<String, String> encodeImageProcLambdaRequest(final byte[] requestBody) {
-        Map<String, String> requestPayload = new HashMap<>();
-        String result = new String(requestBody).lines().collect(Collectors.joining("\n"));
-        String[] resultSplits = result.split(",");
-
-        final var format = resultSplits[0].split("/")[1].split(";")[0];
-
-        requestPayload.put("fileFormat", format);
-        requestPayload.put("body", resultSplits[1]);
 
         return requestPayload;
     }
@@ -390,6 +395,20 @@ public class LoadBalancerHandler implements HttpHandler {
             normalizedInput[col] = (input[col] - mean) / (standardDeviation + EPSILON);
         }
         return normalizedInput;
+    }
+
+
+    private static Map<String, String> encodeImageProcLambdaRequest(final byte[] requestBody) {
+        Map<String, String> requestPayload = new HashMap<>();
+        String result = new String(requestBody).lines().collect(Collectors.joining("\n"));
+        String[] resultSplits = result.split(",");
+
+        final var format = resultSplits[0].split("/")[1].split(";")[0];
+
+        requestPayload.put("fileFormat", format);
+        requestPayload.put("body", resultSplits[1]);
+
+        return requestPayload;
     }
 
     private static void applyFunctionToColumn(final double[][] x, final int col, final Consumer<double[]> function) {

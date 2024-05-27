@@ -18,10 +18,8 @@ public class AutoScaler {
     public static final long MAX_WORKLOAD = DEFAULT_WORK_RAYTRACER * 5;
     public static final double WORKERS_UNDERLOADED_THRESHOLD = 0.3 * MAX_WORKLOAD;
     public static final double WORKERS_OVERLOADED_THRESHOLD = 0.7 * MAX_WORKLOAD;
-
+    private static final Region region = Region.EU_WEST_3;
     private final VMWorkersMonitor vmWorkersMonitor;
-
-    private final Region region = Region.EU_WEST_3;
     private final CloudWatchClient cloudWatchClient = CloudWatchClient.builder().region(region).build();
     private final Ec2Client ec2Client = Ec2Client.builder().region(region).build();
 
@@ -65,6 +63,9 @@ public class AutoScaler {
         logger.info("Monitoring " + instances.size() + " instances");
         updateInstances(instances);
 
+        if (instances.isEmpty())
+            return;
+
         // Updates the CPU usage of the instances
         AwsUtils.getCpuUsage(cloudWatchClient, instances.keySet().stream().toList())
                 .forEach((instanceId, cpuUsage) -> instances.get(instanceId).setCpuUsage(cpuUsage));
@@ -83,20 +84,38 @@ public class AutoScaler {
 
         logger.info("Average work: " + averageWork + " Average CPU usage: " + averageCpuUsage + " Instances: " + instances.size());
 
-        // Check if we need to scale up, down or do nothing
-        if (averageWork > WORKERS_OVERLOADED_THRESHOLD && !vmWorkersMonitor.anyVmWorkerInitializing()) {
-            logger.info("VM workers are overloaded and none is initializing, scaling up");
+        if (needToScaleUp(averageWork))
+            scaleUp();
+        else if (needToScaleDown(averageWork, instances, averageCpuUsage))
+            markInstanceForScaleDown(instances);
+    }
 
-            final var instance = AwsUtils.launchInstance(ec2Client);
-            final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.INITIALIZING);
-            vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
-        } else if (averageWork < WORKERS_UNDERLOADED_THRESHOLD && instances.size() > 1) {
-            logger.info("VM workers are underloaded, scaling down");
-            instances.values().stream()
-                    .filter(VMWorker::isRunning)
-                    .min(Comparator.comparingDouble(VMWorker::getCpuUsage)) // TODO: use work or cpu usage?
-                    .ifPresent(VMWorker::markForTermination);
-        }
+
+    private boolean needToScaleUp(double averageWork) {
+        return averageWork > WORKERS_OVERLOADED_THRESHOLD && !vmWorkersMonitor.anyVmWorkerInitializing();
+    }
+
+    private void scaleUp() {
+        logger.info("VM workers are overloaded and none is initializing, scaling up");
+
+        final var instance = AwsUtils.launchInstance(ec2Client);
+        final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.INITIALIZING);
+        vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
+    }
+
+
+    private static boolean needToScaleDown(double averageWork, Map<String, VMWorker> instances, double averageCpuUsage) {
+        return (averageWork < WORKERS_UNDERLOADED_THRESHOLD && !instances.isEmpty()) || (instances.size() == 1 && averageCpuUsage < 50);
+    }
+
+    private void markInstanceForScaleDown(Map<String, VMWorker> instances) {
+        instances.values().stream()
+                .filter(vmWorker -> !vmWorker.isFresh())
+                .min(Comparator.comparingDouble(VMWorker::getWork))
+                .ifPresent(vmWorker -> {
+                    logger.info("VM workers are underloaded, scaling down");
+                    vmWorker.markForTermination();
+                });
     }
 
     private void updateInstances(final Map<String, VMWorker> instances) {

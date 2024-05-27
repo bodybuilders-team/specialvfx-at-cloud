@@ -52,14 +52,6 @@ public class LoadAndScaleWebServer {
             logger.info("Instance " + instance.instanceId() + " added");
         }
 
-        /*if (vmWorkersMonitor.getVmWorkers().isEmpty()) {
-            logger.info("No instances found, launching a new one");
-            final var instance = AwsUtils.launchInstanceAndWait(ec2Client);
-            final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.RUNNING);
-            vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
-            logger.info("Instance " + instance.instanceId() + " added");
-        }*/
-
         // Start the auto scaler
         AutoScaler autoScaler = new AutoScaler(vmWorkersMonitor);
         autoScaler.start();

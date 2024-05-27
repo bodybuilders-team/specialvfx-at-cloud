@@ -1,15 +1,30 @@
 package pt.ulisboa.tecnico.cnv.utils;
 
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
-import software.amazon.awssdk.services.cloudwatch.model.*;
+import software.amazon.awssdk.services.cloudwatch.model.Dimension;
+import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataRequest;
+import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataResponse;
+import software.amazon.awssdk.services.cloudwatch.model.Metric;
+import software.amazon.awssdk.services.cloudwatch.model.MetricDataQuery;
+import software.amazon.awssdk.services.cloudwatch.model.MetricDataResult;
+import software.amazon.awssdk.services.cloudwatch.model.MetricStat;
 import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.ec2.model.*;
+import software.amazon.awssdk.services.ec2.model.DescribeInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.DescribeInstancesResponse;
+import software.amazon.awssdk.services.ec2.model.Instance;
+import software.amazon.awssdk.services.ec2.model.InstanceStateName;
+import software.amazon.awssdk.services.ec2.model.InstanceType;
+import software.amazon.awssdk.services.ec2.model.RunInstancesMonitoringEnabled;
+import software.amazon.awssdk.services.ec2.model.RunInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.TerminateInstancesRequest;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.logging.Logger;
 
 public class AwsUtils {
@@ -152,18 +167,18 @@ public class AwsUtils {
                 .toList();
     }
 
-    public static Instance launchInstanceAndWait(final Ec2Client ec2Client) {
-        final var tempInstanceInfo = AwsUtils.launchInstance(ec2Client);
-        return waitForInstance(ec2Client, tempInstanceInfo.instanceId());
-    }
-
-    public static Instance waitForInstance(final Ec2Client ec2Client, final String instanceId) {
-        final var instanceWaitResponse = ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instanceId));
-        final var instance = instanceWaitResponse.matched().response().map(r -> r.reservations().get(0).instances().get(0));
+    public static Instance waitForInstance(final Ec2Client ec2Client, final String instanceId) throws CnvIOException {
+        Optional<Instance> instance;
+        try {
+            final var instanceWaitResponse = ec2Client.waiter().waitUntilInstanceRunning(r -> r.instanceIds(instanceId));
+            instance = instanceWaitResponse.matched().response().map(r -> r.reservations().get(0).instances().get(0));
+        } catch (SdkClientException e) {
+            throw new CnvIOException("Failed waiting for instance to be running");
+        }
 
         if (instance.isEmpty()) {
             logger.severe("Failed waiting for instance to be running");
-            throw new RuntimeException("Failed waiting for instance to be running");
+            throw new CnvIOException("Failed waiting for instance to be running");
         }
 
         try {

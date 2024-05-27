@@ -9,8 +9,8 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class VMWorkersMonitor {
     private final Map<String, VMWorker> vmWorkers = new ConcurrentHashMap<>();
+    private final ReentrantLock lock = new ReentrantLock();
     private long totalWork = 0;
-    private ReentrantLock lock = new ReentrantLock();
 
     public VMWorkersMonitor() {
         super();
@@ -21,7 +21,7 @@ public class VMWorkersMonitor {
         return vmWorkers;
     }
 
-    public Boolean anyVmWorkerInitializing() {
+    public boolean anyVmWorkerInitializing() {
         return vmWorkers.values().stream().anyMatch(VMWorker::isInitializing);
     }
 
