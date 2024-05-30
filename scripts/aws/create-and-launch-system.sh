@@ -2,6 +2,8 @@
 
 source config.sh
 
+echo "Deploying SpecialVFX@Cloud (creating and launching system)..."
+
 # Register lambda functions.
 echo "Registering functions on AWS..."
 "$SCRIPT_DIR"/function-register.sh

@@ -20,7 +20,7 @@ aws iam attach-role-policy \
 sleep 5
 
 # Create lambda function for imageproc
-echo "Creating lambda for imageproc..."
+echo "Creating lambda function for imageproc (blur-lambda)..."
 aws lambda create-function \
 	--function-name blur-lambda \
 	--zip-file fileb://../../app/imageproc/target/imageproc-1.0.0-SNAPSHOT-jar-with-dependencies.jar \
@@ -30,6 +30,7 @@ aws lambda create-function \
 	--memory-size 256 \
 	--role arn:aws:iam::$AWS_ACCOUNT_ID:role/lambda-role | jq -r '.FunctionArn' > blur-lambda-arn
 
+echo "Creating lambda function for imageproc (enhance-lambda)..."
 aws lambda create-function \
 	--function-name enhance-lambda \
 	--zip-file fileb://../../app/imageproc/target/imageproc-1.0.0-SNAPSHOT-jar-with-dependencies.jar \
@@ -40,7 +41,7 @@ aws lambda create-function \
 	--role arn:aws:iam::$AWS_ACCOUNT_ID:role/lambda-role | jq -r '.FunctionArn' > enhance-lambda-arn
 
 # Create lambda function for raytracer
-echo "Creating lambda for raytracer..."
+echo "Creating lambda function for raytracer (raytracer-lambda)..."
 aws lambda create-function \
   --function-name raytracer-lambda \
   --zip-file fileb://../../app/raytracer/target/raytracer-1.0.0-SNAPSHOT-jar-with-dependencies.jar \

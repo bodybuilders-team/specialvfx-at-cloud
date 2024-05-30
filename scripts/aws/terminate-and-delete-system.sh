@@ -2,6 +2,8 @@
 
 source config.sh
 
+echo "Terminating and deleting system..."
+
 # Terminate load balancer
 "$SCRIPT_DIR"/terminate-system.sh
 
@@ -10,3 +12,5 @@ source config.sh
 
 # Deregister image
 "$SCRIPT_DIR"/deregister-image.sh
+
+echo "Terminated and deleted system..."

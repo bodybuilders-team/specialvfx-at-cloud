@@ -2,6 +2,8 @@
 
 source config.sh
 
+echo "Installing software in the VM instance..."
+
 # Install java.
 cmd="sudo yum update -y; sudo yum install java-17-amazon-corretto -y"
 ssh -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAIR_PATH ec2-user@$(cat instance.dns) $cmd
@@ -21,3 +23,5 @@ scp -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAIR_PATH "$SCRIPT_DIR/config
 run_cmd="source /home/ec2-user/config.sh && java -cp /home/ec2-user/$webserver_jar -javaagent:/home/ec2-user/$instrumentation_jar=RequestAnalyzer:pt.ulisboa.tecnico.cnv.imageproc,boofcv,pt.ulisboa.tecnico.cnv.raytracer:output pt.ulisboa.tecnico.cnv.webserver.WebServer > /home/ec2-user/webserver.log 2>&1"
 cmd="echo \"$run_cmd\" | sudo tee -a /etc/rc.local; sudo chmod +x /etc/rc.local"
 ssh -o StrictHostKeyChecking=no -i $AWS_EC2_SSH_KEYPAIR_PATH ec2-user@$(cat instance.dns) $cmd
+
+echo "Installed software in the VM instance."
