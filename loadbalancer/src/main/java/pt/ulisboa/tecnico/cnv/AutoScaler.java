@@ -66,7 +66,7 @@ public class AutoScaler {
     private void monitorInstances() {
         final var instances = vmWorkersMonitor.getVmWorkers();
 
-        logger.info("Monitoring " + instances.size() + " instances");
+        logger.info("Monitoring " + instances.size() + " instances." + (vmWorkersMonitor.anyVmWorkerInitializing() ? " One instance is initializing." : ""));
         updateInstances(instances);
 
         if (instances.isEmpty())

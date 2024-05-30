@@ -87,7 +87,7 @@ public class LoadBalancerHandler implements HttpHandler {
                     requestWork = estimateComplexity(requestURI, requestBody);
                     break;
                 } catch (SdkClientException e) {
-                    logger.warning("Error while estimating request complexity, retrying. Error: " + e.getMessage());
+                    logger.warning("Error while estimating request complexity, retrying in " + (time1 / 1000) + " seconds. Error: " + e.getMessage());
                     Thread.sleep(time1);
                     time1 *= 2;
                 }
@@ -100,11 +100,11 @@ public class LoadBalancerHandler implements HttpHandler {
                     loadBalance(exchange, requestWork, requestURI, requestBody);
                     break;
                 } catch (SdkClientException e) {
-                    logger.warning("Error when contacting aws, retrying. Error: " + e.getMessage());
+                    logger.warning("Error when contacting aws, retrying in " + (time2 / 1000) + " seconds. Error: " + e.getMessage());
                 } catch (CnvIOException e) {
-                    logger.warning("Error while redirecting request to VM worker, retrying. Error: " + e.getMessage());
+                    logger.warning("Error while redirecting request to VM worker, retrying in " + (time2 / 1000) + " seconds. Error: " + e.getMessage());
                 } catch (TooManyRequestsException e) {
-                    logger.warning("Too many requests sent to lambda, retrying in " + time2 / 1000 + " seconds");
+                    logger.warning("Too many requests sent to lambda, retrying in " + (time2 / 1000) + " seconds");
                 } finally {
                     Thread.sleep(time2);
                     time2 *= 2;
@@ -133,7 +133,7 @@ public class LoadBalancerHandler implements HttpHandler {
 
         // TODO: Add fault tolerance when for example we redirect to a terminating instance or smthg like that.
         if (vmWorkerWithLeastWork.isPresent()) {
-            logger.info("Redirecting to VM worker: " + vmWorkerWithLeastWork.get().getInstance().instanceId());
+            logger.info("Redirecting to VM worker: " + vmWorkerWithLeastWork.get().getInstance().instanceId() + " that has " + vmWorkerWithLeastWork.get().getWork() + " current work");
             vmWorkersMonitor.unlock();
             redirectToVMWorker(exchange, vmWorkerWithLeastWork.get(), requestURI, requestWork, requestBody);
             return;
@@ -143,7 +143,8 @@ public class LoadBalancerHandler implements HttpHandler {
                 .filter(VMWorker::isInitializing)
                 .findAny();
 
-        logger.info("Initializing VM worker: " + initializingVmWorkerOpt.map(vm -> vm.getInstance().instanceId()).orElse("none"));
+        logger.info("No running VM worker can handle the request, waiting for another one to initialize or redirecting to a lambda worker.\n" +
+                "VM worker that is already currently initializing: " + initializingVmWorkerOpt.map(vm -> vm.getInstance().instanceId()).orElse("none"));
 
         if (requestWork > COMPLEX_REQUEST_THRESHOLD) {
             logger.info("Complex request, redirecting to a vm worker");
@@ -199,6 +200,7 @@ public class LoadBalancerHandler implements HttpHandler {
 
         vmWorkersMonitor.lock();
         vmWorkersMonitor.addWork(instance, requestComplexity);
+        logger.info("Work of " + requestComplexity + " added to VM worker " + instance.getInstance().instanceId() + ". Current work: " + instance.getWork());
         vmWorkersMonitor.unlock();
         try {
             HttpURLConnection connection;
