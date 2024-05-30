@@ -2,6 +2,7 @@
 
 source config.sh
 
+echo "Launching new instance..."
 # Run new instance.
 aws ec2 run-instances \
 	--image-id resolve:ssm:/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2 \
@@ -9,19 +10,20 @@ aws ec2 run-instances \
 	--key-name $AWS_KEYPAIR_NAME \
 	--security-group-ids $AWS_SECURITY_GROUP \
 	--monitoring Enabled=true | jq -r ".Instances[0].InstanceId" > instance.id
-echo "New instance with id $(cat instance.id)."
+echo "New instance with id $(cat instance.id) launched."
 
+echo "Waiting for instance with id $(cat instance.id) to finish initializing (be running)."
 # Wait for instance to be running.
-aws ec2 wait instance-running --instance-ids $(cat instance.id)
+aws ec2 wait instance-running --instance-ids "$(cat instance.id)"
 echo "New instance with id $(cat instance.id) is now running."
 
-# Extract DNS nane.
+# Extract DNS name.
 aws ec2 describe-instances \
-	--instance-ids $(cat instance.id) | jq -r ".Reservations[0].Instances[0].NetworkInterfaces[0].PrivateIpAddresses[0].Association.PublicDnsName" > instance.dns
+	--instance-ids "$(cat instance.id)" | jq -r ".Reservations[0].Instances[0].NetworkInterfaces[0].PrivateIpAddresses[0].Association.PublicDnsName" > instance.dns
 echo "New instance with id $(cat instance.id) has address $(cat instance.dns)."
 
 # Wait for instance to have SSH ready.
-while ! nc -z $(cat instance.dns) 22; do
+while ! nc -z "$(cat instance.dns)" 22; do
 	echo "Waiting for $(cat instance.dns):22 (SSH)..."
 	sleep 0.5
 done
