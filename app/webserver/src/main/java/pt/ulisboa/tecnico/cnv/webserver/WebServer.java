@@ -126,6 +126,8 @@ public class WebServer {
         final var image = request.getImage();
         final long numPixels = ((long) image.getWidth()) * image.getHeight();
         metric.setNumPixels(numPixels);
+        metric.setWidth(image.getWidth());
+        metric.setHeight(image.getHeight());
 
         return metric;
     }
