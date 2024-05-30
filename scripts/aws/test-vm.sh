@@ -15,3 +15,6 @@ while ! nc -z $(cat instance.dns) 8000; do
 	sleep 0.5
 done
 
+# Sending a query!
+# echo "Sending a query!"
+# curl $(cat instance.dns):8000/test

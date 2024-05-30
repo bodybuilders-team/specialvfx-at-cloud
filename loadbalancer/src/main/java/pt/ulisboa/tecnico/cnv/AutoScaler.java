@@ -1,6 +1,7 @@
 package pt.ulisboa.tecnico.cnv;
 
 import pt.ulisboa.tecnico.cnv.utils.AwsUtils;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
 import software.amazon.awssdk.services.ec2.Ec2Client;
@@ -39,11 +40,16 @@ public class AutoScaler {
         new Thread(() -> {
             try {
                 while (true) {
-                    vmWorkersMonitor.lock();
-                    monitorInstances();
-                    terminateMarkedInstances();
-                    vmWorkersMonitor.unlock();
-                    Thread.sleep(5000);
+                    try {
+                        vmWorkersMonitor.lock();
+                        monitorInstances();
+                        terminateMarkedInstances();
+                    } catch (SdkClientException e) {
+                        // Ignore
+                    } finally {
+                        vmWorkersMonitor.unlock();
+                        Thread.sleep(5000);
+                    }
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

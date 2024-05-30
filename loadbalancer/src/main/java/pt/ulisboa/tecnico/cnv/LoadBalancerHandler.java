@@ -18,6 +18,7 @@ import pt.ulisboa.tecnico.cnv.utils.CnvIOException;
 import pt.ulisboa.tecnico.cnv.utils.ExceptionUtils;
 import pt.ulisboa.tecnico.cnv.utils.Utils;
 import software.amazon.awssdk.core.SdkBytes;
+import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.http.HttpStatusCode;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.Instance;
@@ -29,20 +30,12 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Base64;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-import static pt.ulisboa.tecnico.cnv.AutoScaler.COMPLEX_REQUEST_THRESHOLD;
-import static pt.ulisboa.tecnico.cnv.AutoScaler.DEFAULT_WORK_IMAGE_PROCESSOR;
-import static pt.ulisboa.tecnico.cnv.AutoScaler.DEFAULT_WORK_RAYTRACER;
-import static pt.ulisboa.tecnico.cnv.AutoScaler.MAX_WORKLOAD;
+import static pt.ulisboa.tecnico.cnv.AutoScaler.*;
 
 public class LoadBalancerHandler implements HttpHandler {
     public static final String RAYTRACER_PATH = "/raytracer";
@@ -87,19 +80,34 @@ public class LoadBalancerHandler implements HttpHandler {
             final var requestURI = exchange.getRequestURI();
             final var requestBody = exchange.getRequestBody().readAllBytes();
 
-            final var requestWork = estimateComplexity(requestURI, requestBody);
+            var time1 = 1000;
+            long requestWork;
+            while (true) {
+                try {
+                    requestWork = estimateComplexity(requestURI, requestBody);
+                    break;
+                } catch (SdkClientException e) {
+                    logger.warning("Error while estimating request complexity, retrying. Error: " + e.getMessage());
+                    Thread.sleep(time1);
+                    time1 *= 2;
+                }
+            }
             logger.info("Received request for " + requestURI + " with complexity " + requestWork);
 
+            var time2 = 1000;
             while (true) {
                 try {
                     loadBalance(exchange, requestWork, requestURI, requestBody);
                     break;
+                } catch (SdkClientException e) {
+                    logger.warning("Error when contacting aws, retrying. Error: " + e.getMessage());
                 } catch (CnvIOException e) {
                     logger.warning("Error while redirecting request to VM worker, retrying. Error: " + e.getMessage());
-                    Thread.sleep(1000);
                 } catch (TooManyRequestsException e) {
-                    logger.warning("Too many requests sent to lambda, retrying in 1 second");
-                    Thread.sleep(1000);
+                    logger.warning("Too many requests sent to lambda, retrying in " + time2 / 1000 + " seconds");
+                } finally {
+                    Thread.sleep(time2);
+                    time2 *= 2;
                 }
             }
         } catch (Exception e) {

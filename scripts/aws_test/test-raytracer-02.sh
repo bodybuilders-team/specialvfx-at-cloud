@@ -17,11 +17,12 @@ script_dir=$(dirname "$(realpath "$0")")
 resources_dir=$(realpath "$script_dir/../../app/raytracer/resources/")
 url=$1
 
+# Add scene.txt raw content to JSON.
+cat "$resources_dir/test01.txt" | jq -sR '{scene: .}' > payload_simple.json
+
 function simple {
   start=$(date +%s.%N)
 	echo "started raytracer simple"
-	# Add scene.txt raw content to JSON.
-	cat "$resources_dir/test01.txt" | jq -sR '{scene: .}' > payload_simple.json
 	# Send the request.
 	curl -s -X POST "http://$url/raytracer?scols=400&srows=300&wcols=400&wrows=300&coff=0&roff=0&aa=false" --data @"./payload_simple.json" > result_simple.txt
 
@@ -54,7 +55,7 @@ function complex {
 
 # Run 100 requests concurrently and repeat 500 times
 for ((i = 0; i < 50000; i++)); do
-    for ((j = 0; j < 3; j++)); do
+    for ((j = 0; j < 4; j++)); do
         simple &
     done
     sleep 3
