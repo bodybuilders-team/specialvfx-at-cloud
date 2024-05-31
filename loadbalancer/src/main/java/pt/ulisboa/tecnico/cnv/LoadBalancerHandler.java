@@ -414,15 +414,11 @@ public class LoadBalancerHandler implements HttpHandler {
 
                 final var scene = ((String) body.get("scene"));
                 final var sceneSize = scene == null ? 0 : scene.length();
-                final var texMap = ((ArrayList<Integer>) body.get("texmap"));
-                final var texMapSize = texMap == null ? 0 : texMap.size();
 
                 final int scols = Integer.parseInt(parameters.get("scols"));
                 final int srows = Integer.parseInt(parameters.get("srows"));
                 final int wcols = Integer.parseInt(parameters.get("wcols"));
                 final int wrows = Integer.parseInt(parameters.get("wrows"));
-                final int coff = Integer.parseInt(parameters.get("coff"));
-                final int roff = Integer.parseInt(parameters.get("roff"));
 
                 final var regression = new CNVMultipleLinearRegression();
                 final var requests = raytracerRequestMetricRepository.getAllDistinctRequests();
@@ -432,10 +428,10 @@ public class LoadBalancerHandler implements HttpHandler {
 
                 final var y = requests.stream().mapToDouble(RaytracerRequestMetric::getInstructionCount).toArray();
 
-                final var x = requests.stream().map(r -> new double[]{r.getSceneSize(), r.getTextMapSize(), r.getScols(), r.getSrows(), r.getWcols(), r.getWrows(), r.getCoff(), r.getRoff()})
+                final var x = requests.stream().map(r -> new double[]{r.getSceneSize(), r.getScols(), r.getSrows(), r.getWcols(), r.getWrows()})
                         .toArray(double[][]::new);
 
-                final var input = new double[]{sceneSize, texMapSize, scols, srows, wcols, wrows, coff, roff};
+                final var input = new double[]{sceneSize, scols, srows, wcols, wrows};
 
                 final var normalizedInput = normalize(x, input);
 

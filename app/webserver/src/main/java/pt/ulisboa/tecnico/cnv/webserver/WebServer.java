@@ -109,11 +109,6 @@ public class WebServer {
         else
             metric.setSceneSize(0);
 
-        if (request.getTexmap() != null)
-            metric.setTextMapSize(request.getTexmap().length);
-        else
-            metric.setTextMapSize(0);
-
         metric.setId(request.getId());
         metric.setBblCount(request.getBblCount());
         metric.setInstructionCount(request.getInstructionCount());
@@ -122,8 +117,6 @@ public class WebServer {
         metric.setSrows(request.getSrows());
         metric.setWcols(request.getWcols());
         metric.setWrows(request.getWrows());
-        metric.setCoff(request.getCoff());
-        metric.setRoff(request.getRoff());
 
         return metric;
     }

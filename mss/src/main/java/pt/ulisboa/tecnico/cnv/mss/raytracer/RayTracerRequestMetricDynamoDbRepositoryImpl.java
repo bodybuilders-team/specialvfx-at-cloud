@@ -63,13 +63,12 @@ public class RayTracerRequestMetricDynamoDbRepositoryImpl implements RaytracerRe
     public List<RaytracerRequestMetric> getAllDistinctRequests() {
         Comparator<RaytracerRequestMetric> comparator = Comparator
                 .comparing(RaytracerRequestMetric::getInstructionCount)
+                .thenComparing(RaytracerRequestMetric::getSceneSize)
                 .thenComparing(RaytracerRequestMetric::getBblCount)
                 .thenComparing(RaytracerRequestMetric::getScols)
                 .thenComparing(RaytracerRequestMetric::getSrows)
                 .thenComparing(RaytracerRequestMetric::getWcols)
-                .thenComparing(RaytracerRequestMetric::getWrows)
-                .thenComparing(RaytracerRequestMetric::getCoff)
-                .thenComparing(RaytracerRequestMetric::getRoff);
+                .thenComparing(RaytracerRequestMetric::getWrows);
 
         Set<RaytracerRequestMetric> uniqueRequests = new TreeSet<>(comparator);
 
