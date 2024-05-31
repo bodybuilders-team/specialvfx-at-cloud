@@ -380,7 +380,7 @@ public class LoadBalancerHandler implements HttpHandler {
 
                 regression.newSampleData(y, x);
 
-                return (long) regression.predict(normalizedInput);
+                return Math.max((long) regression.predict(normalizedInput), DEFAULT_WORK_IMAGE_PROCESSOR / 3);
             }
             case ENHANCEIMAGE_PATH: {
                 final var image = Utils.readImage(requestBody);
@@ -400,7 +400,7 @@ public class LoadBalancerHandler implements HttpHandler {
 
                 regression.newSampleData(y, x);
 
-                return (long) regression.predict(normalizedInput);
+                return Math.max((long) regression.predict(normalizedInput), DEFAULT_WORK_IMAGE_PROCESSOR / 3);
             }
             case RAYTRACER_PATH: {
                 final Map<String, String> parameters = URLEncodedUtils.parse(requestURI, Charset.defaultCharset())
@@ -435,7 +435,7 @@ public class LoadBalancerHandler implements HttpHandler {
 
                 regression.newSampleData(y, x);
 
-                return (long) regression.predict(normalizedInput);
+                return Math.max((long) regression.predict(normalizedInput), DEFAULT_WORK_RAYTRACER / 3);
             }
             default:
                 throw new IllegalArgumentException("Invalid request path");
