@@ -30,7 +30,7 @@ function simple {
   echo "started imageproc simple"
 
 	# Send the request.
-	curl -s -X POST "http://$url/blurimage" --data @"./simple_temp.txt" > result_imageproc_simple.txt
+	curl -s -X POST "http://$url/enhanceimage" --data @"./simple_temp.txt" > result_imageproc_simple.txt
 
 	# Remove a formatting string (remove everything before the comma) and decode from Base64.
 	sed -i 's/^[^,]*,//' result_imageproc_simple.txt
@@ -48,7 +48,7 @@ function complex {
   echo "started imageproc complex"
 
 	# Send the request.
-	curl -s -X POST "http://$url/blurimage" --data @"./complex_temp.txt" > result_imageproc_complex.txt
+	curl -s -X POST "http://$url/enhanceimage" --data @"./complex_temp.txt" > result_imageproc_complex.txt
 
 	# Remove a formatting string (remove everything before the comma) and decode from Base64.
 	sed -i 's/^[^,]*,//' result_imageproc_complex.txt

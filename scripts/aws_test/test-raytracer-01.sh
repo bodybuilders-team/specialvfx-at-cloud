@@ -17,18 +17,24 @@ script_dir=$(dirname "$(realpath "$0")")
 resources_dir=$(realpath "$script_dir/../../app/raytracer/resources/")
 url=$1
 
-# Add scene.txt raw content to JSON.
+# Simple - Add scene.txt raw content to JSON.
 cat "$resources_dir/test01.txt" | jq -sR '{scene: .}' > payload_simple.json
+
+# Complex - Add texmap.bmp raw content to JSON.
+cat "$resources_dir/test-texmap.txt" | jq -sR '{scene: .}' > payload_complex.json
+hexdump -ve '1/1 "%u\n"' "$resources_dir/test-texmap.bmp" | jq -s --argjson original "$(<payload_complex.json)" '$original * {texmap: .}' > payload_complex.json
 
 function simple {
   start=$(date +%s.%N)
 	echo "started raytracer simple"
-	# Send the request.
-	curl -s -X POST "http://$url/raytracer?scols=400&srows=300&wcols=400&wrows=300&coff=0&roff=0&aa=false" --data @"./payload_simple.json" > result_simple.txt
 
-	# Remove a formatting string (remove everything before the comma).
-	sed -i 's/^[^,]*,//' result_simple.txt                                                                                             
-	base64 -d result_simple.txt > result_simple.bmp
+	# Send the request.
+	curl -s -X POST "http://$url/raytracer?scols=400&srows=300&wcols=400&wrows=300&coff=0&roff=0&aa=false" --data @"./payload_simple.json" > result_raytracer_simple.txt
+
+	# Remove a formatting string (remove everything before the comma) and decode from Base64.
+	sed -i 's/^[^,]*,//' result_raytracer_simple.txt
+	base64 -d result_raytracer_simple.txt > result_raytracer_simple.bmp
+
 	echo "finished raytracer simple"
 
   end=$(date +%s.%N)
@@ -36,24 +42,28 @@ function simple {
   echo "Execution time: $duration seconds"
 }
 
-cat "$resources_dir/test-texmap.txt" | jq -sR '{scene: .}' > payload_complex.json
-hexdump -ve '1/1 "%u\n"' "$resources_dir/test-texmap.bmp" | jq -s --argjson original "$(<payload_complex.json)" '$original * {texmap: .}' > payload_complex.json
-
 function complex {
   start=$(date +%s.%N)
 	echo "started raytrace complex"
+
 	# Send the request.
-	curl -s -X POST "http://$url/raytracer?scols=400&srows=300&wcols=400&wrows=300&coff=0&roff=0&aa=false" --data @"./payload_complex.json" > result_complex.txt
-	# Remove a formatting string (remove everything before the comma).
-	sed -i 's/^[^,]*,//' result_complex.txt                                                                                             
-	base64 -d result_complex.txt > result_complex.bmp
+	curl -s -X POST "http://$url/raytracer?scols=400&srows=300&wcols=400&wrows=300&coff=0&roff=0&aa=false" --data @"./payload_complex.json" > result_raytracer_complex.txt
+
+	# Remove a formatting string (remove everything before the comma) and decode from Base64.
+	sed -i 's/^[^,]*,//' result_raytracer_complex.txt
+	base64 -d result_raytracer_complex.txt > result_raytracer_complex.bmp
+
 	echo "finished raytracer complex"
+
   end=$(date +%s.%N)
   duration=$(echo "$end - $start" | bc)
   echo "Execution time: $duration seconds"
 }
 
-# Run 100 requests concurrently and repeat 500 times
+# simple
+# complex
+
+# Run multiple requests concurrently every X seconds
 for ((i = 0; i < 50000; i++)); do
     for ((j = 0; j < 1; j++)); do
         simple &

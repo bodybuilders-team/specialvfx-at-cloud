@@ -29,7 +29,7 @@ public class Main {
 //            "        -noshadow - don't compute shadows\n"+
 //            "        -noreflec - don't do reflections\n"+
 //            "        -notrans  - don't do transparency\n"+
-            "        -aa             - use anti-aliasing (~4x slower)\n" +
+//          "        -aa             - use anti-aliasing (~4x slower)\n" +
             "        -multi          - use multi-threading (good for large, anti-aliased images)";
     public static boolean ANTI_ALIAS = false;
     public static boolean MULTI_THREAD = false;
@@ -63,10 +63,10 @@ public class Main {
             bmptexmap = Files.readAllBytes(Paths.get(texmapFilename));
             System.out.println("Using texmap: '" + texmapFilename + "'.");
         }
-        if (Arrays.stream(args).anyMatch("-aa"::equals)) {
+        /*if (Arrays.stream(args).anyMatch("-aa"::equals)) {
             System.out.println("Anti-aliasing enabled.");
             ANTI_ALIAS = true;
-        }
+        }*/
         if (Arrays.stream(args).anyMatch("-multi"::equals)) {
             System.out.println("Multi-threading enabled.");
             MULTI_THREAD = true;
