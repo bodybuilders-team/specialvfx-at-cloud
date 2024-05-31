@@ -102,7 +102,7 @@ public class LoadBalancerHandler implements HttpHandler {
                 } catch (SdkClientException e) {
                     logger.warning("Error when contacting aws, retrying in " + (time2 / 1000) + " seconds. Error: " + e.getMessage());
                 } catch (CnvIOException e) {
-                    logger.warning("Error while redirecting request to VM worker, retrying in " + (time2 / 1000) + " seconds. Error: " + e.getMessage());
+                    logger.warning("Error while redirecting request to worker, retrying in " + (time2 / 1000) + " seconds. Error: " + e.getMessage());
                 } catch (TooManyRequestsException e) {
                     logger.warning("Too many requests sent to lambda, retrying in " + (time2 / 1000) + " seconds");
                 } finally {
@@ -353,12 +353,20 @@ public class LoadBalancerHandler implements HttpHandler {
                         .stream()
                         .collect(Collectors.toMap(NameValuePair::getName, NameValuePair::getValue));
 
-                int scols = Integer.parseInt(parameters.get("scols"));
-                int srows = Integer.parseInt(parameters.get("srows"));
-                int wcols = Integer.parseInt(parameters.get("wcols"));
-                int wrows = Integer.parseInt(parameters.get("wrows"));
-                int coff = Integer.parseInt(parameters.get("coff"));
-                int roff = Integer.parseInt(parameters.get("roff"));
+                Map<String, Object> body = mapper.readValue(requestBody, new TypeReference<>() {
+                });
+
+                final var scene = ((String) body.get("scene"));
+                final var sceneSize = scene == null ? 0 : scene.length();
+                final var texMap = ((ArrayList<Integer>) body.get("texmap"));
+                final var texMapSize = texMap == null ? 0 : texMap.size();
+
+                final int scols = Integer.parseInt(parameters.get("scols"));
+                final int srows = Integer.parseInt(parameters.get("srows"));
+                final int wcols = Integer.parseInt(parameters.get("wcols"));
+                final int wrows = Integer.parseInt(parameters.get("wrows"));
+                final int coff = Integer.parseInt(parameters.get("coff"));
+                final int roff = Integer.parseInt(parameters.get("roff"));
 
                 final var regression = new CNVMultipleLinearRegression();
                 final var requests = raytracerRequestMetricRepository.getAllRequests();
@@ -368,10 +376,10 @@ public class LoadBalancerHandler implements HttpHandler {
 
                 final var y = requests.stream().mapToDouble(RaytracerRequestMetric::getInstructionCount).toArray();
 
-                final var x = requests.stream().map(r -> new double[]{r.getScols(), r.getSrows(), r.getWcols(), r.getWrows(), r.getCoff(), r.getRoff()})
+                final var x = requests.stream().map(r -> new double[]{r.getSceneSize(), r.getTextMapSize(), r.getScols(), r.getSrows(), r.getWcols(), r.getWrows(), r.getCoff(), r.getRoff()})
                         .toArray(double[][]::new);
 
-                final var input = new double[]{scols, srows, wcols, wrows, coff, roff};
+                final var input = new double[]{sceneSize, texMapSize, scols, srows, wcols, wrows, coff, roff};
 
                 final var normalizedInput = normalize(x, input);
 

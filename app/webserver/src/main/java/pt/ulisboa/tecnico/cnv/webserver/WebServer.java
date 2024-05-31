@@ -96,6 +96,16 @@ public class WebServer {
     private static RaytracerRequestMetric raytracerRequestToMetric(final RaytracerRequest request) {
         final var metric = new RaytracerRequestMetric();
 
+        if (request.getInput() != null)
+            metric.setSceneSize(request.getInput().length);
+        else
+            metric.setSceneSize(0);
+
+        if (request.getTexmap() != null)
+            metric.setTextMapSize(request.getTexmap().length);
+        else
+            metric.setTextMapSize(0);
+
         metric.setId(request.getId());
         metric.setBblCount(request.getBblCount());
         metric.setInstructionCount(request.getInstructionCount());

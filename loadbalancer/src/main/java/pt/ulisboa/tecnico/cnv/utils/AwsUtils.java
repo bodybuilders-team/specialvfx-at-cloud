@@ -2,29 +2,18 @@ package pt.ulisboa.tecnico.cnv.utils;
 
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.services.cloudwatch.CloudWatchClient;
-import software.amazon.awssdk.services.cloudwatch.model.Dimension;
-import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataRequest;
-import software.amazon.awssdk.services.cloudwatch.model.GetMetricDataResponse;
-import software.amazon.awssdk.services.cloudwatch.model.Metric;
-import software.amazon.awssdk.services.cloudwatch.model.MetricDataQuery;
-import software.amazon.awssdk.services.cloudwatch.model.MetricDataResult;
-import software.amazon.awssdk.services.cloudwatch.model.MetricStat;
+import software.amazon.awssdk.services.cloudwatch.model.*;
 import software.amazon.awssdk.services.ec2.Ec2Client;
-import software.amazon.awssdk.services.ec2.model.DescribeInstancesRequest;
-import software.amazon.awssdk.services.ec2.model.DescribeInstancesResponse;
-import software.amazon.awssdk.services.ec2.model.Instance;
-import software.amazon.awssdk.services.ec2.model.InstanceStateName;
-import software.amazon.awssdk.services.ec2.model.InstanceType;
-import software.amazon.awssdk.services.ec2.model.RunInstancesMonitoringEnabled;
-import software.amazon.awssdk.services.ec2.model.RunInstancesRequest;
-import software.amazon.awssdk.services.ec2.model.TerminateInstancesRequest;
+import software.amazon.awssdk.services.ec2.model.*;
 
+import java.io.IOException;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+import java.util.*;
 import java.util.logging.Logger;
 
 public class AwsUtils {
@@ -34,6 +23,9 @@ public class AwsUtils {
     private static final String AWS_KEYPAIR_NAME = System.getenv("AWS_KEYPAIR_NAME");
     private static final long OBS_TIME = 60 * 5; // 5 minutes
     private static final Logger logger = Logger.getLogger(AwsUtils.class.getName());
+    private static final int MAX_TRIES = 60;
+    private static final HttpClient client = HttpClient.newHttpClient();
+    public static final int WAIT_DELAY = 2000;
 
     private AwsUtils() {
         // hide implicit public constructor
@@ -181,13 +173,47 @@ public class AwsUtils {
             throw new CnvIOException("Failed waiting for instance to be running");
         }
 
-        try {
-            Thread.sleep(2000); // Wait for the instance to be ready
-        } catch (InterruptedException e) {
-            e.printStackTrace();
+        // Wait for the webserver to be up by sending requests to /
+        var i = 0;
+        while (true) {
+            try {
+                i++;
+
+                final var isReady = isWebserverReady(instance.get());
+
+                if (isReady)
+                    break;
+
+                Thread.sleep(WAIT_DELAY);
+
+                if (i >= MAX_TRIES)
+                    throw new CnvIOException("Failed to connect to instance " + instance.get().instanceId());
+
+            } catch (InterruptedException e) {
+                logger.warning("Failed to connect to instance " + instance.get().instanceId());
+            }
         }
 
         return instance.get();
+    }
+
+
+    public static boolean isWebserverReady(final Instance instance) {
+        try {
+            final var request = HttpRequest.newBuilder()
+                    .uri(new URI("http://" + instance.publicDnsName() + ":8000/"))
+                    .GET()
+                    .build();
+
+            final HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200)
+                return false;
+        } catch (IOException | URISyntaxException | InterruptedException e) {
+            return false;
+        }
+
+        return true;
     }
 
     public static Instance getInstance(final Ec2Client ec2Client, final String instanceId) {

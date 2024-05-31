@@ -8,6 +8,7 @@ import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.Instance;
 import software.amazon.awssdk.services.ec2.model.InstanceStateName;
 
+import java.net.http.HttpClient;
 import java.util.Comparator;
 import java.util.Map;
 import java.util.logging.Logger;
@@ -23,7 +24,7 @@ public class AutoScaler {
     private final VMWorkersMonitor vmWorkersMonitor;
     private final CloudWatchClient cloudWatchClient = CloudWatchClient.builder().region(region).build();
     private final Ec2Client ec2Client = Ec2Client.builder().region(region).build();
-
+    private final HttpClient client = HttpClient.newHttpClient();
     private final Logger logger = Logger.getLogger(AutoScaler.class.getName());
 
 
@@ -152,6 +153,11 @@ public class AutoScaler {
                 final var newInstance = runningInstances.stream().filter(i -> i.instanceId().equals(instanceId)).findFirst();
 
                 if (newInstance.isEmpty())
+                    continue;
+
+                final var webserverReady = AwsUtils.isWebserverReady(instance.getInstance());
+
+                if (!webserverReady)
                     continue;
 
                 logger.info("Instance " + instanceId + " is now running, updating it.");

@@ -5,6 +5,8 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
 
 @DynamoDbBean
 public class RaytracerRequestMetric extends RequestMetric {
+    private int sceneSize;
+    private int textMapSize;
     private int scols;
     private int srows;
     private int wcols;
@@ -61,4 +63,19 @@ public class RaytracerRequestMetric extends RequestMetric {
     }
 
 
+    public int getTextMapSize() {
+        return textMapSize;
+    }
+
+    public void setTextMapSize(final int textMapSize) {
+        this.textMapSize = textMapSize;
+    }
+
+    public int getSceneSize() {
+        return sceneSize;
+    }
+
+    public void setSceneSize(final int sceneSize) {
+        this.sceneSize = sceneSize;
+    }
 }
