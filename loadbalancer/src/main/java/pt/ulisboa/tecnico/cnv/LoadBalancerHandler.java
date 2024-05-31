@@ -20,6 +20,7 @@ import pt.ulisboa.tecnico.cnv.utils.Utils;
 import software.amazon.awssdk.core.SdkBytes;
 import software.amazon.awssdk.core.exception.SdkClientException;
 import software.amazon.awssdk.http.HttpStatusCode;
+import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughputExceededException;
 import software.amazon.awssdk.services.ec2.Ec2Client;
 import software.amazon.awssdk.services.ec2.model.Instance;
 import software.amazon.awssdk.services.lambda.LambdaClient;
@@ -30,12 +31,20 @@ import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.Charset;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-import static pt.ulisboa.tecnico.cnv.AutoScaler.*;
+import static pt.ulisboa.tecnico.cnv.AutoScaler.COMPLEX_REQUEST_THRESHOLD;
+import static pt.ulisboa.tecnico.cnv.AutoScaler.DEFAULT_WORK_IMAGE_PROCESSOR;
+import static pt.ulisboa.tecnico.cnv.AutoScaler.DEFAULT_WORK_RAYTRACER;
+import static pt.ulisboa.tecnico.cnv.AutoScaler.MAX_WORKLOAD;
 
 public class LoadBalancerHandler implements HttpHandler {
     public static final String RAYTRACER_PATH = "/raytracer";
@@ -68,6 +77,29 @@ public class LoadBalancerHandler implements HttpHandler {
         this.lambdaClient = lambdaClient;
     }
 
+    private static Map<String, String> encodeImageProcLambdaRequest(final byte[] requestBody) {
+        Map<String, String> requestPayload = new HashMap<>();
+        String result = new String(requestBody).lines().collect(Collectors.joining("\n"));
+        String[] resultSplits = result.split(",");
+
+        final var format = resultSplits[0].split("/")[1].split(";")[0];
+
+        requestPayload.put("fileFormat", format);
+        requestPayload.put("body", resultSplits[1]);
+
+        return requestPayload;
+    }
+
+    private static void applyFunctionToColumn(final double[][] x, final int col, final Consumer<double[]> function) {
+        final var colData = Arrays.stream(x).mapToDouble(row -> row[col]).toArray();
+
+        function.accept(colData);
+
+        for (int i = 0; i < x.length; ++i) {
+            x[i][col] = colData[i];
+        }
+    }
+
     @Override
     public void handle(final HttpExchange exchange) throws IOException {
         try {
@@ -86,8 +118,8 @@ public class LoadBalancerHandler implements HttpHandler {
                 try {
                     requestWork = estimateComplexity(requestURI, requestBody);
                     break;
-                } catch (SdkClientException e) {
-                    logger.warning("Error while estimating request complexity, retrying in " + (time1 / 1000) + " seconds. Error: " + e.getMessage());
+                } catch (SdkClientException | ProvisionedThroughputExceededException e) {
+                    logger.warning("Error while estimating request complexity, retrying in " + (time1 / 1000) + " seconds.");
                     Thread.sleep(time1);
                     time1 *= 2;
                 }
@@ -100,11 +132,11 @@ public class LoadBalancerHandler implements HttpHandler {
                     loadBalance(exchange, requestWork, requestURI, requestBody);
                     break;
                 } catch (SdkClientException e) {
-                    logger.warning("Error when contacting aws, retrying in " + (time2 / 1000) + " seconds. Error: " + e.getMessage());
+                    logger.warning("Error when contacting aws, retrying in " + (time2 / 1000) + " seconds.");
                 } catch (CnvIOException e) {
-                    logger.warning("Error while redirecting request to worker, retrying in " + (time2 / 1000) + " seconds. Error: " + e.getMessage());
+                    logger.warning("Error while redirecting request to worker, retrying in " + (time2 / 1000) + " seconds.");
                 } catch (TooManyRequestsException e) {
-                    logger.warning("Too many requests sent to lambda, retrying in " + (time2 / 1000) + " seconds");
+                    logger.warning("Too many requests sent to lambda, retrying in " + (time2 / 1000) + " seconds.");
                 } finally {
                     Thread.sleep(time2);
                     time2 *= 2;
@@ -327,7 +359,7 @@ public class LoadBalancerHandler implements HttpHandler {
      */
     private long estimateComplexity(final URI requestURI, final byte[] requestBody) throws IOException {
         switch (requestURI.getPath()) {
-            case BLURIMAGE_PATH: {
+            case BLURIMAGE_PATH, ENHANCEIMAGE_PATH: {
                 final var image = Utils.readImage(requestBody);
                 final var numPixels = image.getWidth() * image.getHeight();
 
@@ -388,7 +420,7 @@ public class LoadBalancerHandler implements HttpHandler {
                 return (long) regression.predict(normalizedInput);
             }
             default:
-                return 1;
+                throw new IllegalArgumentException("Invalid request path");
         }
     }
 
@@ -413,29 +445,5 @@ public class LoadBalancerHandler implements HttpHandler {
             normalizedInput[col] = (input[col] - mean) / (standardDeviation + EPSILON);
         }
         return normalizedInput;
-    }
-
-
-    private static Map<String, String> encodeImageProcLambdaRequest(final byte[] requestBody) {
-        Map<String, String> requestPayload = new HashMap<>();
-        String result = new String(requestBody).lines().collect(Collectors.joining("\n"));
-        String[] resultSplits = result.split(",");
-
-        final var format = resultSplits[0].split("/")[1].split(";")[0];
-
-        requestPayload.put("fileFormat", format);
-        requestPayload.put("body", resultSplits[1]);
-
-        return requestPayload;
-    }
-
-    private static void applyFunctionToColumn(final double[][] x, final int col, final Consumer<double[]> function) {
-        final var colData = Arrays.stream(x).mapToDouble(row -> row[col]).toArray();
-
-        function.accept(colData);
-
-        for (int i = 0; i < x.length; ++i) {
-            x[i][col] = colData[i];
-        }
     }
 }

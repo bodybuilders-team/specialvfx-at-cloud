@@ -24,7 +24,7 @@ import java.util.logging.Logger;
  * Entry point for the webserver that will act as a load balancer and auto scaler.
  */
 public class LoadAndScaleWebServer {
-    public static final String AWS_REGION = "eu-west-3";
+    public static final String AWS_REGION = System.getenv("AWS_DEFAULT_REGION");
     private static final int PORT = 8001;
     private static final Logger logger = Logger.getLogger(LoadAndScaleWebServer.class.getName());
 

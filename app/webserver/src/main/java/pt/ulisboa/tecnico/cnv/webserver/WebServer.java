@@ -42,7 +42,7 @@ public class WebServer {
                 imageProcessorRequestMetricRepository
         );
 
-        server.createContext("/", new RootHandler()).getFilters().add(metricsRecorderFilter);
+        server.createContext("/", new RootHandler());
         server.createContext("/raytracer", new RaytracerHandler()).getFilters().add(metricsRecorderFilter);
         server.createContext("/blurimage", new BlurImageHandler()).getFilters().add(metricsRecorderFilter);
         server.createContext("/enhanceimage", new EnhanceImageHandler()).getFilters().add(metricsRecorderFilter);

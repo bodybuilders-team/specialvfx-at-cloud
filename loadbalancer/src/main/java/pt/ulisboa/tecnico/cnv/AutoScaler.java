@@ -20,7 +20,7 @@ public class AutoScaler {
     public static final long MAX_WORKLOAD = DEFAULT_WORK_RAYTRACER * 5;
     public static final double WORKERS_UNDERLOADED_THRESHOLD = 0.3 * MAX_WORKLOAD;
     public static final double WORKERS_OVERLOADED_THRESHOLD = 0.7 * MAX_WORKLOAD;
-    private static final Region region = Region.EU_WEST_3;
+    private static final Region region = Region.of(System.getenv("AWS_DEFAULT_REGION"));
     private final VMWorkersMonitor vmWorkersMonitor;
     private final CloudWatchClient cloudWatchClient = CloudWatchClient.builder().region(region).build();
     private final Ec2Client ec2Client = Ec2Client.builder().region(region).build();
@@ -30,6 +30,10 @@ public class AutoScaler {
 
     public AutoScaler(final VMWorkersMonitor instances) {
         this.vmWorkersMonitor = instances;
+    }
+
+    private static boolean needToScaleDown(double averageWork, Map<String, VMWorker> instances, double averageCpuUsage) {
+        return (averageWork < WORKERS_UNDERLOADED_THRESHOLD && !instances.isEmpty()) || (instances.size() == 1 && averageCpuUsage < 50);
     }
 
     /**
@@ -97,7 +101,6 @@ public class AutoScaler {
             markInstanceForScaleDown(instances);
     }
 
-
     private boolean needToScaleUp(double averageWork) {
         return averageWork > WORKERS_OVERLOADED_THRESHOLD && !vmWorkersMonitor.anyVmWorkerInitializing();
     }
@@ -108,11 +111,6 @@ public class AutoScaler {
         final var instance = AwsUtils.launchInstance(ec2Client);
         final var vmWorker = new VMWorker(instance, VMWorker.WorkerState.INITIALIZING);
         vmWorkersMonitor.getVmWorkers().put(instance.instanceId(), vmWorker);
-    }
-
-
-    private static boolean needToScaleDown(double averageWork, Map<String, VMWorker> instances, double averageCpuUsage) {
-        return (averageWork < WORKERS_UNDERLOADED_THRESHOLD && !instances.isEmpty()) || (instances.size() == 1 && averageCpuUsage < 50);
     }
 
     private void markInstanceForScaleDown(Map<String, VMWorker> instances) {
@@ -147,7 +145,7 @@ public class AutoScaler {
 
         // Check if the instances are initialized
         for (var instance : instances.values()) {
-            if (!instance.isRunning()) {
+            if (instance.isInitializing()) {
                 // Get the instance data
                 final var instanceId = instance.getInstance().instanceId();
                 final var newInstance = runningInstances.stream().filter(i -> i.instanceId().equals(instanceId)).findFirst();
@@ -155,7 +153,11 @@ public class AutoScaler {
                 if (newInstance.isEmpty())
                     continue;
 
-                final var webserverReady = AwsUtils.isWebserverReady(instance.getInstance());
+                logger.info("Checking if webserver is ready in Autoscaler");
+
+                final var webserverReady = AwsUtils.isWebserverReady(newInstance.get());
+
+                logger.info("Webserver is ready: " + webserverReady);
 
                 if (!webserverReady)
                     continue;
