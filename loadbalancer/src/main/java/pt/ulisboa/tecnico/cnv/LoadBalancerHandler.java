@@ -54,7 +54,8 @@ public class LoadBalancerHandler implements HttpHandler {
     private static final int PORT = 8000;
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final Logger logger = Logger.getLogger(LoadBalancerHandler.class.getName());
-    private final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository;
+    private final ImageProcessorRequestMetricRepository blurImageRequestMetricRepository;
+    private final ImageProcessorRequestMetricRepository enhanceImageRequestMetricRepository;
     private final RaytracerRequestMetricRepository raytracerRequestMetricRepository;
     private final VMWorkersMonitor vmWorkersMonitor;
     private final Ec2Client ec2Client;
@@ -66,13 +67,15 @@ public class LoadBalancerHandler implements HttpHandler {
     public LoadBalancerHandler(
             final VMWorkersMonitor vmWorkersMonitor,
             RaytracerRequestMetricRepository raytracerRequestMetricRepository,
-            final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository,
+            final ImageProcessorRequestMetricRepository blurImageRequestMetricRepository,
+            final ImageProcessorRequestMetricRepository enhanceImageRequestMetricRepository,
             final Ec2Client ec2Client,
             final LambdaClient lambdaClient
     ) {
         this.vmWorkersMonitor = vmWorkersMonitor;
         this.raytracerRequestMetricRepository = raytracerRequestMetricRepository;
-        this.imageProcessorRequestMetricRepository = imageProcessorRequestMetricRepository;
+        this.blurImageRequestMetricRepository = blurImageRequestMetricRepository;
+        this.enhanceImageRequestMetricRepository = enhanceImageRequestMetricRepository;
         this.ec2Client = ec2Client;
         this.lambdaClient = lambdaClient;
     }
@@ -359,12 +362,33 @@ public class LoadBalancerHandler implements HttpHandler {
      */
     private long estimateComplexity(final URI requestURI, final byte[] requestBody) throws IOException {
         switch (requestURI.getPath()) {
-            case BLURIMAGE_PATH, ENHANCEIMAGE_PATH: {
+            case BLURIMAGE_PATH: {
                 final var image = Utils.readImage(requestBody);
                 final var numPixels = image.getWidth() * image.getHeight();
 
                 final var regression = new CNVMultipleLinearRegression();
-                final var requests = imageProcessorRequestMetricRepository.getAllRequests();
+                final var requests = blurImageRequestMetricRepository.getAllDistinctRequests();
+
+                if (requests.size() <= 1)
+                    return DEFAULT_WORK_IMAGE_PROCESSOR;
+
+                final var y = requests.stream().mapToDouble(ImageProcessorRequestMetric::getInstructionCount).toArray();
+
+                final var x = requests.stream().map(r -> new double[]{r.getNumPixels()})
+                        .toArray(double[][]::new);
+
+                final var normalizedInput = normalize(x, new double[]{numPixels});
+
+                regression.newSampleData(y, x);
+
+                return (long) regression.predict(normalizedInput);
+            }
+            case ENHANCEIMAGE_PATH: {
+                final var image = Utils.readImage(requestBody);
+                final var numPixels = image.getWidth() * image.getHeight();
+
+                final var regression = new CNVMultipleLinearRegression();
+                final var requests = enhanceImageRequestMetricRepository.getAllDistinctRequests();
 
                 if (requests.size() <= 1)
                     return DEFAULT_WORK_IMAGE_PROCESSOR;
@@ -401,7 +425,7 @@ public class LoadBalancerHandler implements HttpHandler {
                 final int roff = Integer.parseInt(parameters.get("roff"));
 
                 final var regression = new CNVMultipleLinearRegression();
-                final var requests = raytracerRequestMetricRepository.getAllRequests();
+                final var requests = raytracerRequestMetricRepository.getAllDistinctRequests();
 
                 if (requests.size() <= 1)
                     return DEFAULT_WORK_RAYTRACER;

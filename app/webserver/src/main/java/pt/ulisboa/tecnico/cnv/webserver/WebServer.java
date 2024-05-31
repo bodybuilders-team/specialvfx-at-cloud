@@ -8,8 +8,9 @@ import pt.ulisboa.tecnico.cnv.imageproc.ImageProcessingRequest;
 import pt.ulisboa.tecnico.cnv.javassist.Request;
 import pt.ulisboa.tecnico.cnv.javassist.tools.RequestAnalyzer;
 import pt.ulisboa.tecnico.cnv.mss.DynamoDbClientManager;
+import pt.ulisboa.tecnico.cnv.mss.imageprocessor.BlurImageRequestMetricDynamoDbRepositoryImpl;
+import pt.ulisboa.tecnico.cnv.mss.imageprocessor.EnhanceImageRequestMetricDynamoDbRepositoryImpl;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetric;
-import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricDynamoDbRepositoryImpl;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricRepository;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RayTracerRequestMetricDynamoDbRepositoryImpl;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetric;
@@ -35,11 +36,13 @@ public class WebServer {
         DynamoDbClientManager dynamoDbClientManager = new DynamoDbClientManager();
 
         RaytracerRequestMetricRepository raytracerRequestMetricRepository = new RayTracerRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
-        ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository = new ImageProcessorRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
+        final ImageProcessorRequestMetricRepository blurImageRequestMetricDynamoDbRepository = new BlurImageRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
+        final ImageProcessorRequestMetricRepository enhanceImageRequestMetricDynamoDbRepository = new EnhanceImageRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
 
         Filter metricsRecorderFilter = getMetricsRecorderFilter(
                 raytracerRequestMetricRepository,
-                imageProcessorRequestMetricRepository
+                blurImageRequestMetricDynamoDbRepository,
+                enhanceImageRequestMetricDynamoDbRepository
         );
 
         server.createContext("/", new RootHandler());
@@ -55,13 +58,15 @@ public class WebServer {
     /**
      * Creates a filter that records the metrics of the request collected by the instrumentation tool and stores them.
      *
-     * @param raytracerRequestMetricRepository      the repository where the raytracer request metrics will be stored
-     * @param imageProcessorRequestMetricRepository the repository where the image processor request metrics will be stored
+     * @param raytracerRequestMetricRepository    the repository where the raytracer request metrics will be stored
+     * @param blurImageRequestMetricRepository    the repository where the blur request metrics will be stored
+     * @param enhanceImageRequestMetricRepository the repository where the enhance request metrics will be stored
      * @return the filter
      */
     private static Filter getMetricsRecorderFilter(
             RaytracerRequestMetricRepository raytracerRequestMetricRepository,
-            ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository
+            ImageProcessorRequestMetricRepository blurImageRequestMetricRepository,
+            ImageProcessorRequestMetricRepository enhanceImageRequestMetricRepository
     ) {
         return Filter.afterHandler(
                 "Obtains the metrics of the request collected by the instrumentation tool and stores them",
@@ -79,7 +84,10 @@ public class WebServer {
                         if (request instanceof RaytracerRequest raytracerRequest)
                             raytracerRequestMetricRepository.save(raytracerRequestToMetric(raytracerRequest));
                         else if (request instanceof ImageProcessingRequest imageProcessingRequest)
-                            imageProcessorRequestMetricRepository.save(imageProcessorRequestToMetric(imageProcessingRequest));
+                            if (httpExchange.getRequestURI().getPath().equals("/blurimage"))
+                                blurImageRequestMetricRepository.save(imageProcessorRequestToMetric(imageProcessingRequest));
+                            else if (httpExchange.getRequestURI().getPath().equals("/enhanceimage"))
+                                enhanceImageRequestMetricRepository.save(imageProcessorRequestToMetric(imageProcessingRequest));
                     } else {
                         LOGGER.severe(String.format("[%s] Request from thread %s was not found%n", RequestAnalyzer.class.getSimpleName(), threadId));
                     }

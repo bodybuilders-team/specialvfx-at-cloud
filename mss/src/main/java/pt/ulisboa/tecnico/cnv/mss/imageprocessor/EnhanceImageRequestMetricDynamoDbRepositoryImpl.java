@@ -14,14 +14,14 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
-public class ImageProcessorRequestMetricDynamoDbRepositoryImpl implements ImageProcessorRequestMetricRepository {
-    public static final String TABLE_NAME = "image_processor_requests";
+public class EnhanceImageRequestMetricDynamoDbRepositoryImpl implements ImageProcessorRequestMetricRepository {
+    public static final String TABLE_NAME = "enhance_image_requests";
     private static final long READ_CAPACITY_UNITS = 10L;
     private static final long WRITE_CAPACITY_UNITS = 10L;
 
     private final DynamoDbTable<ImageProcessorRequestMetric> requestTable;
 
-    public ImageProcessorRequestMetricDynamoDbRepositoryImpl(DynamoDbClientManager dynamoDbClientManager) {
+    public EnhanceImageRequestMetricDynamoDbRepositoryImpl(DynamoDbClientManager dynamoDbClientManager) {
         DynamoDbClient dynamoDbClient = dynamoDbClientManager.getDynamoDbClient();
         DynamoDbEnhancedClient enhancedClient = dynamoDbClientManager.getEnhancedClient();
 

@@ -5,7 +5,8 @@ import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
 import org.apache.http.client.methods.HttpGet;
 import pt.ulisboa.tecnico.cnv.mss.DynamoDbClientManager;
-import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricDynamoDbRepositoryImpl;
+import pt.ulisboa.tecnico.cnv.mss.imageprocessor.BlurImageRequestMetricDynamoDbRepositoryImpl;
+import pt.ulisboa.tecnico.cnv.mss.imageprocessor.EnhanceImageRequestMetricDynamoDbRepositoryImpl;
 import pt.ulisboa.tecnico.cnv.mss.imageprocessor.ImageProcessorRequestMetricRepository;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RayTracerRequestMetricDynamoDbRepositoryImpl;
 import pt.ulisboa.tecnico.cnv.mss.raytracer.RaytracerRequestMetricRepository;
@@ -34,7 +35,8 @@ public class LoadAndScaleWebServer {
 
         final DynamoDbClientManager dynamoDbClientManager = new DynamoDbClientManager();
         final RaytracerRequestMetricRepository raytracerRequestMetricRepository = new RayTracerRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
-        final ImageProcessorRequestMetricRepository imageProcessorRequestMetricRepository = new ImageProcessorRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
+        final ImageProcessorRequestMetricRepository blurImageRequestMetricDynamoDbRepository = new BlurImageRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
+        final ImageProcessorRequestMetricRepository enhanceImageRequestMetricDynamoDbRepository = new EnhanceImageRequestMetricDynamoDbRepositoryImpl(dynamoDbClientManager);
 
         final LambdaClient lambdaClient = LambdaClient.builder()
                 .region(Region.of(AWS_REGION))
@@ -63,7 +65,8 @@ public class LoadAndScaleWebServer {
         server.createContext("/", new LoadBalancerHandler(
                 vmWorkersMonitor,
                 raytracerRequestMetricRepository,
-                imageProcessorRequestMetricRepository,
+                blurImageRequestMetricDynamoDbRepository,
+                enhanceImageRequestMetricDynamoDbRepository,
                 ec2Client,
                 lambdaClient
         ));
