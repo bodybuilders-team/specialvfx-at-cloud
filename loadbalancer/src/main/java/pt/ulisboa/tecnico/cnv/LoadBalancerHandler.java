@@ -364,7 +364,6 @@ public class LoadBalancerHandler implements HttpHandler {
         switch (requestURI.getPath()) {
             case BLURIMAGE_PATH: {
                 final var image = Utils.readImage(requestBody);
-                final var numPixels = image.getWidth() * image.getHeight();
 
                 final var regression = new CNVMultipleLinearRegression();
                 final var requests = blurImageRequestMetricRepository.getAllDistinctRequests();
@@ -374,10 +373,10 @@ public class LoadBalancerHandler implements HttpHandler {
 
                 final var y = requests.stream().mapToDouble(ImageProcessorRequestMetric::getInstructionCount).toArray();
 
-                final var x = requests.stream().map(r -> new double[]{r.getNumPixels()})
+                final var x = requests.stream().map(r -> new double[]{r.getWidth(), r.getHeight()})
                         .toArray(double[][]::new);
 
-                final var normalizedInput = normalize(x, new double[]{numPixels});
+                final var normalizedInput = normalize(x, new double[]{image.getWidth(), image.getHeight()});
 
                 regression.newSampleData(y, x);
 
@@ -385,7 +384,6 @@ public class LoadBalancerHandler implements HttpHandler {
             }
             case ENHANCEIMAGE_PATH: {
                 final var image = Utils.readImage(requestBody);
-                final var numPixels = image.getWidth() * image.getHeight();
 
                 final var regression = new CNVMultipleLinearRegression();
                 final var requests = enhanceImageRequestMetricRepository.getAllDistinctRequests();
@@ -395,10 +393,10 @@ public class LoadBalancerHandler implements HttpHandler {
 
                 final var y = requests.stream().mapToDouble(ImageProcessorRequestMetric::getInstructionCount).toArray();
 
-                final var x = requests.stream().map(r -> new double[]{r.getNumPixels()})
+                final var x = requests.stream().map(r -> new double[]{r.getWidth(), r.getHeight()})
                         .toArray(double[][]::new);
 
-                final var normalizedInput = normalize(x, new double[]{numPixels});
+                final var normalizedInput = normalize(x, new double[]{image.getWidth(), image.getHeight()});
 
                 regression.newSampleData(y, x);
 

@@ -64,7 +64,8 @@ public class BlurImageRequestMetricDynamoDbRepositoryImpl implements ImageProces
         Comparator<ImageProcessorRequestMetric> comparator = Comparator
                 .comparing(ImageProcessorRequestMetric::getInstructionCount)
                 .thenComparing(ImageProcessorRequestMetric::getBblCount)
-                .thenComparing(ImageProcessorRequestMetric::getNumPixels);
+                .thenComparing(ImageProcessorRequestMetric::getWidth)
+                .thenComparing(ImageProcessorRequestMetric::getHeight);
 
         Set<ImageProcessorRequestMetric> uniqueRequests = new TreeSet<>(comparator);
 

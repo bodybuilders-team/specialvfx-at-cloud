@@ -135,8 +135,6 @@ public class WebServer {
         metric.setInstructionCount(request.getInstructionCount());
 
         final var image = request.getImage();
-        final long numPixels = ((long) image.getWidth()) * image.getHeight();
-        metric.setNumPixels(numPixels);
         metric.setWidth(image.getWidth());
         metric.setHeight(image.getHeight());
 
