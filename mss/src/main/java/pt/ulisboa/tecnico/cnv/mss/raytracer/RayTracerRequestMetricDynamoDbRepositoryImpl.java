@@ -3,7 +3,6 @@ package pt.ulisboa.tecnico.cnv.mss.raytracer;
 import pt.ulisboa.tecnico.cnv.mss.DynamoDbClientManager;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
-import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
@@ -47,16 +46,6 @@ public class RayTracerRequestMetricDynamoDbRepositoryImpl implements RaytracerRe
     @Override
     public void save(RaytracerRequestMetric request) {
         requestTable.putItem(request);
-    }
-
-    @Override
-    public RaytracerRequestMetric getRequestById(String id) {
-        return requestTable.getItem(Key.builder().partitionValue(id).build());
-    }
-
-    @Override
-    public List<RaytracerRequestMetric> getAllRequests() {
-        return requestTable.scan().items().stream().toList();
     }
 
     @Override

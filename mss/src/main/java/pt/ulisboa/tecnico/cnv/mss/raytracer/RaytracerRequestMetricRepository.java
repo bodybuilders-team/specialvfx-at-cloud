@@ -16,21 +16,6 @@ public interface RaytracerRequestMetricRepository {
     void save(RaytracerRequestMetric request);
 
     /**
-     * Get a request by its ID.
-     *
-     * @param id the ID of the request
-     * @return the request with the given ID
-     */
-    RaytracerRequestMetric getRequestById(String id);
-
-    /**
-     * Get all requests stored in the system.
-     *
-     * @return a list of all requests
-     */
-    List<RaytracerRequestMetric> getAllRequests();
-
-    /**
      * Get all distinct requests stored in the system.
      *
      * @return a list of all distinct requests

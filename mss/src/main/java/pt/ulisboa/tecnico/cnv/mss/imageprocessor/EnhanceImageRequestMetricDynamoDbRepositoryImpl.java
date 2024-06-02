@@ -3,7 +3,6 @@ package pt.ulisboa.tecnico.cnv.mss.imageprocessor;
 import pt.ulisboa.tecnico.cnv.mss.DynamoDbClientManager;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
 import software.amazon.awssdk.enhanced.dynamodb.DynamoDbTable;
-import software.amazon.awssdk.enhanced.dynamodb.Key;
 import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
 import software.amazon.awssdk.services.dynamodb.DynamoDbClient;
 import software.amazon.awssdk.services.dynamodb.model.ProvisionedThroughput;
@@ -46,16 +45,6 @@ public class EnhanceImageRequestMetricDynamoDbRepositoryImpl implements ImagePro
     @Override
     public void save(ImageProcessorRequestMetric request) {
         requestTable.putItem(request);
-    }
-
-    @Override
-    public ImageProcessorRequestMetric getRequestById(String id) {
-        return requestTable.getItem(Key.builder().partitionValue(id).build());
-    }
-
-    @Override
-    public List<ImageProcessorRequestMetric> getAllRequests() {
-        return requestTable.scan().items().stream().toList();
     }
 
     @Override
